@@ -4,7 +4,7 @@ Une IA qui vit sur ton téléphone. Pas un chatbot dans le nuage : un **vrai
 réseau de neurones** exécuté localement, une **mémoire vierge au départ** qui
 se remplit toute seule, et des **règles que tu écris toi-même**.
 
-Version 0.5.2 — Android 9 (API 28) minimum, téléphone arm64.
+Version 0.6.0 — Android 9 (API 28) minimum, téléphone arm64.
 
 ## Ce qu'elle est
 
@@ -66,6 +66,13 @@ inconnues ») : la carte propose le bouton qui ouvre directement le bon écran.
 Si l'installation automatique échoue, le bouton « Ouvrir la page de
 téléchargement » reste disponible en secours.
 
+Une seule exception, une seule fois : les versions publiées avant la 0.6.0 ont
+chacune été signées avec une clé différente (la clé debug, régénérée à chaque
+build), donc Android les voit comme une autre application et répond « paquet en
+conflit avec un package déjà présent ». Désinstalle cette ancienne version une
+fois, installe la 0.6.0 : ensuite chaque build est signé avec la même clé, celle
+du dépôt, et les mises à jour s'installent par-dessus sans rien perdre.
+
 ## Vie privée
 
 Le modèle, la mémoire et les conversations restent dans le stockage privé de
@@ -78,6 +85,12 @@ Chaque build GitHub Actions publie `nexus.apk` et un `update.json` signé en
 HMAC-SHA256 sur `version|url|sha256`. L'application recalcule la signature avec
 la clé compilée dans l'APK, puis contrôle l'empreinte de l'APK téléchargé avant
 de l'installer. Sans clé, les mises à jour sont verrouillées.
+
+La clé de signature Android est stable : elle est versionnée dans le dépôt
+(`android/app/key.b64`, décodée en `key.jks` par la CI) et sert à toutes les
+releases. C'est ce qui rend l'installation par-dessus possible. Son empreinte
+SHA-256 :
+`D9:A0:4B:E3:D1:2E:65:95:95:40:4F:82:40:23:BC:60:26:41:74:47:61:35:A7:47:08:71:E3:46:F0:A0:5A:5C`.
 
 ## Construire soi-même
 
