@@ -4,15 +4,16 @@ import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import 'package:flutter_edge_ai_llama/flutter_edge_ai_llama.dart';
 import 'package:nexus_core/nexus_core.dart';
 
-import '../config.dart';
+import 'brain_catalogue.dart';
+import 'brain_prefs.dart';
 import 'nexus_prompt.dart';
 
 /// Où en est le cerveau neuronal de Nexus.
 enum BrainStatus {
-  /// On regarde si le modèle est déjà sur le téléphone.
+  /// On regarde quels cerveaux sont déjà sur le téléphone.
   checking,
 
-  /// Pas encore installé : il faut télécharger le cerveau.
+  /// Aucun cerveau installé : il faut en télécharger un.
   absent,
 
   /// Téléchargement du fichier de modèle en cours.
@@ -28,16 +29,21 @@ enum BrainStatus {
   failed,
 }
 
-/// Le vrai cerveau de Nexus : un réseau de neurones (Qwen3-1.7B) exécuté
+/// Le vrai cerveau de Nexus : un réseau de neurones (Qwen3) exécuté
 /// entièrement sur le téléphone par llama.cpp.
 ///
-/// Aucune requête ne part sur Internet : le modèle est téléchargé une fois,
-/// puis tout le calcul se fait en local. Après chaque échange, le même modèle
-/// relit la conversation et décide tout seul de ce qu'il faut retenir.
+/// Plusieurs cerveaux sont proposés dans [brainCatalogue] ; un seul est allumé
+/// à la fois, et on peut changer à tout moment. Aucun d'eux n'a besoin
+/// d'Internet pour répondre : le fichier est téléchargé une fois, puis tout le
+/// calcul se fait en local. Après chaque échange, le même modèle relit la
+/// conversation et décide tout seul de ce qu'il faut retenir.
 class LlmService {
   BrainStatus _status = BrainStatus.checking;
   double? _progress;
   String? _error;
+
+  BrainVariant _brain = defaultBrain;
+  final Set<String> _installed = <String>{};
 
   InferenceChat? _chat;
   bool _initialized = false;
@@ -50,17 +56,29 @@ class LlmService {
   BrainStatus get status => _status;
   double? get progress => _progress;
   String? get error => _error;
+
+  /// Le cerveau choisi (même s'il n'est pas encore chargé).
+  BrainVariant get brain => _brain;
+
+  /// Vrai si le fichier de ce cerveau est déjà sur le téléphone.
+  bool isBrainInstalled(BrainVariant variant) => _installed.contains(variant.id);
+
   bool get isReady => _status == BrainStatus.ready && _chat != null;
   bool get isBusy =>
       _status == BrainStatus.downloading || _status == BrainStatus.loading;
 
-  /// Prépare le moteur et recharge le cerveau s'il est déjà installé.
+  /// Prépare le moteur, relève les cerveaux déjà installés, puis recharge
+  /// celui qui était allumé la dernière fois.
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
     await _ensureEngine();
     try {
+      await _refreshInstalled();
       if (FlutterEdgeAi.hasActiveModel()) {
+        final String? savedId = await BrainPrefs.loadActiveId();
+        final BrainVariant? saved = savedId == null ? null : brainById(savedId);
+        _brain = saved ?? _firstInstalled() ?? defaultBrain;
         _status = BrainStatus.loading;
         await _open();
       } else {
@@ -71,27 +89,41 @@ class LlmService {
     }
   }
 
-  /// Télécharge le cerveau (1,03 Gio), puis le charge.
-  Future<void> download({void Function(double? percent)? onProgress}) async {
-    if (isBusy || isReady) return;
+  /// Allume un cerveau : le télécharge s'il manque, sinon réutilise le
+  /// fichier déjà présent, puis le charge en mémoire.
+  Future<void> installBrain(
+    BrainVariant variant, {
+    void Function(double? percent)? onProgress,
+  }) async {
+    if (isBusy) return;
     await _ensureEngine();
 
-    _status = BrainStatus.downloading;
-    _progress = null;
+    final bool alreadyThere = _installed.contains(variant.id);
+
+    // On libère le cerveau précédent avant d'en charger un autre : deux
+    // modèles en mémoire feraient exploser la mémoire vive du téléphone.
+    await _closeChat();
+
+    _brain = variant;
+    _progress = alreadyThere ? 100 : null;
     _error = null;
-    onProgress?.call(null);
+    _status = alreadyThere ? BrainStatus.loading : BrainStatus.downloading;
+    onProgress?.call(_progress);
 
     try {
       await FlutterEdgeAi.installModel(
         modelType: ModelType.qwen3,
         fileType: ModelFileType.gguf,
       )
-          .fromNetwork(AppConfig.brainUrl)
+          .fromNetwork(variant.url)
           .withProgress((Object progress) {
-        final percent = _percentOf(progress);
+        final double? percent = _percentOf(progress);
         _progress = percent;
         onProgress?.call(percent);
       }).install();
+
+      _installed.add(variant.id);
+      await BrainPrefs.saveActiveId(variant.id);
 
       _status = BrainStatus.loading;
       onProgress?.call(100);
@@ -107,7 +139,7 @@ class LlmService {
     _opening = true;
     try {
       final model = await FlutterEdgeAi.getActiveModel(
-        maxTokens: AppConfig.contextTokens,
+        maxTokens: _brain.contextTokens,
       );
       _chat = await model.openChat(
         systemInstruction: systemInstruction,
@@ -204,18 +236,43 @@ class LlmService {
   }
 
   Future<void> dispose() async {
+    await _closeChat();
+  }
+
+  Future<void> _closeChat() async {
+    final chat = _chat;
+    _chat = null;
     try {
-      await _chat?.close();
+      await chat?.close();
     } catch (_) {
       // Fermeture best-effort : l'application se termine de toute façon.
     }
-    _chat = null;
   }
 
   Future<void> _ensureEngine() async {
     await FlutterEdgeAi.initialize(
       inferenceEngines: const <InferenceEngineProvider>[LlamaEngineProvider()],
     );
+  }
+
+  /// Relève les fichiers de cerveaux déjà présents sur le téléphone.
+  Future<void> _refreshInstalled() async {
+    final List<String> files = await FlutterEdgeAi.listInstalledModels();
+    _installed
+      ..clear()
+      ..addAll(
+        brainCatalogue
+            .where((BrainVariant brain) => files.contains(brain.fileName))
+            .map((BrainVariant brain) => brain.id),
+      );
+  }
+
+  /// Le premier cerveau installé, du plus léger au plus lourd.
+  BrainVariant? _firstInstalled() {
+    for (final BrainVariant brain in brainCatalogue) {
+      if (_installed.contains(brain.id)) return brain;
+    }
+    return null;
   }
 
   /// Exécute [job] après tous les appels déjà en attente.
@@ -240,8 +297,11 @@ class LlmService {
   String _readable(Object error) {
     final raw = error.toString();
     if (raw.contains('memory') || raw.contains('OutOfMemory')) {
-      return 'Le téléphone n\'a pas assez de mémoire vive pour charger le '
-          'cerveau. Ferme d\'autres applications et réessaie.';
+      return 'Le téléphone n\'a pas assez de mémoire vive pour charger ce '
+          'cerveau. Essaie un modèle plus léger (0.6B ou 1.7B).';
+    }
+    if (raw.contains('No space') || raw.contains('ENOSPC')) {
+      return 'Il n\'y a plus assez de place sur le téléphone pour ce cerveau.';
     }
     if (raw.contains('SocketException') || raw.contains('Failed host lookup')) {
       return 'Téléchargement impossible : vérifie ta connexion Internet.';
