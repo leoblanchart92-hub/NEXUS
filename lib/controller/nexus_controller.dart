@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:nexus_core/nexus_core.dart';
 
+import '../data/llm_service.dart';
+import '../data/nexus_prompt.dart';
 import '../data/nexus_store.dart';
 import '../data/tts_service.dart';
 import '../data/update_service.dart';
@@ -27,21 +31,29 @@ class ChatMessage {
       );
 }
 
-/// Fait le lien entre l'interface et le cerveau de Nexus.
+/// Fait le lien entre l'interface, la mémoire de Nexus et son vrai cerveau
+/// neuronal (un modèle exécuté sur le téléphone).
 class NexusController extends ChangeNotifier {
-  NexusController(this._store, {TtsService? tts, UpdateService? updates})
-      : _tts = tts,
-        updates = updates ?? UpdateService();
+  NexusController(
+    this._store, {
+    TtsService? tts,
+    UpdateService? updates,
+    LlmService? llm,
+  })  : _tts = tts,
+        updates = updates ?? UpdateService(),
+        _llm = llm ?? LlmService();
 
   final NexusStore _store;
   final TtsService? _tts;
   final UpdateService updates;
+  final LlmService _llm;
 
   NexusBrain? _brain;
   bool _loading = true;
   bool _thinking = false;
   bool _disposed = false;
   bool _checkingUpdate = false;
+  String _partial = '';
   UpdateCheck? _lastUpdateCheck;
   final List<ChatMessage> _messages = <ChatMessage>[];
 
@@ -55,10 +67,24 @@ class NexusController extends ChangeNotifier {
   UpdateCheck? get lastUpdateCheck => _lastUpdateCheck;
   List<ChatMessage> get messages => List<ChatMessage>.unmodifiable(_messages);
 
+  /// Le texte du cerveau neuronal en train de s'écrire.
+  String get partial => _partial;
+
+  /// Où en est le vrai cerveau : absent, en téléchargement, prêt…
+  BrainStatus get brainStatus => _llm.status;
+  double? get brainProgress => _llm.progress;
+  String? get brainError => _llm.error;
+  bool get brainReady => _llm.isReady;
+  bool get brainBusy => _llm.isBusy;
+
+  /// Les règles de personnalité écrites par son humain.
+  String get persona => _brain?.state.persona ?? '';
+
   @override
   void dispose() {
     _disposed = true;
     _tts?.stop();
+    unawaited(_llm.dispose());
     super.dispose();
   }
 
@@ -66,7 +92,7 @@ class NexusController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  /// Recharge le Nexus déjà né, s'il existe.
+  /// Recharge le Nexus déjà né, s'il existe, puis réveille son cerveau.
   Future<void> load() async {
     final saved = await _store.load();
     if (saved != null) {
@@ -81,6 +107,15 @@ class NexusController extends ChangeNotifier {
       );
     }
     _loading = false;
+    _notify();
+
+    // Le chargement des poids prend quelques secondes : il ne doit pas
+    // bloquer l'affichage.
+    unawaited(_prepareBrain());
+  }
+
+  Future<void> _prepareBrain() async {
+    await _llm.initialize();
     _notify();
   }
 
@@ -106,38 +141,105 @@ class NexusController extends ChangeNotifier {
     await _store.save(state);
   }
 
+  /// Télécharge le cerveau neuronal (1,03 Gio) puis le charge.
+  Future<void> downloadBrain() async {
+    if (_llm.isBusy || _llm.isReady) return;
+
+    await _llm.download(onProgress: (_) => _notify());
+    _notify();
+
+    if (_llm.status == BrainStatus.ready) {
+      _messages.add(
+        ChatMessage.system(
+          'Son cerveau neuronal est réveillé : Nexus pense maintenant par '
+          'elle-même, entièrement sur ton téléphone.',
+        ),
+      );
+    } else if (_llm.status == BrainStatus.failed) {
+      _messages.add(
+        ChatMessage.system(
+          'Le cerveau n\'a pas pu être chargé. ${_llm.error ?? ''}'.trim(),
+        ),
+      );
+    }
+    _notify();
+  }
+
   /// Envoie une phrase à Nexus et récupère sa réponse.
   Future<void> send(String raw) async {
     final brain = _brain;
     final text = raw.trim();
     if (brain == null || text.isEmpty || _thinking) return;
 
+    // Le contexte est construit avant d'ajouter la phrase, pour ne pas
+    // la lui montrer deux fois.
+    final context = buildPromptContext(
+      brain.state,
+      recentTurns: _recentTurns(),
+    );
+
     _messages.add(ChatMessage(text: text, fromNexus: false, at: DateTime.now()));
     _thinking = true;
+    _partial = '';
     _notify();
 
-    // Une petite hésitation : il réfléchit vraiment, lui.
-    await Future<void>.delayed(const Duration(milliseconds: 420));
-    if (_disposed) return;
+    // Le moteur à mots ne parle plus : il tient seulement la croissance,
+    // le vocabulaire et les faits appris (xp, mémoire, besoins).
+    final growth = brain.respond(text);
 
-    final reply = brain.respond(text);
+    var replyText = growth.text;
+    if (_llm.isReady) {
+      try {
+        replyText = await _llm.reply(
+          userText: text,
+          context: context,
+          onDelta: (String partial) {
+            _partial = partial;
+            _notify();
+          },
+        );
+      } catch (error) {
+        replyText = growth.text;
+        _messages.add(
+          ChatMessage.system(
+            'Le cerveau neuronal n\'a pas répondu (${_llm.error ?? error}).',
+          ),
+        );
+      }
+    }
+
+    _partial = '';
+    _thinking = false;
     _messages.add(
-      ChatMessage(text: reply.text, fromNexus: true, at: DateTime.now()),
+      ChatMessage(text: replyText, fromNexus: true, at: DateTime.now()),
     );
-    if (reply.stageUp) {
+    if (growth.stageUp) {
       _messages.add(
         ChatMessage.system(
-          'Nexus grandit : ${reply.stage.label} ${reply.stage.emoji}',
+          'Nexus grandit : ${growth.stage.label} ${growth.stage.emoji}',
         ),
       );
     }
-    _thinking = false;
     _notify();
 
     if (brain.state.voiceEnabled) {
-      await _tts?.speak(reply.text);
+      await _tts?.speak(replyText);
     }
     await _store.save(brain.state);
+  }
+
+  /// Les derniers tours de parole, pour que le modèle suive la discussion.
+  List<String> _recentTurns() {
+    final turns = <String>[];
+    final spoken = _messages.where((ChatMessage m) => !m.isSystem).toList();
+    for (final ChatMessage message in spoken.reversed.take(10)) {
+      final who = message.fromNexus ? 'Toi' : 'Lui';
+      final body = message.text.length > 180
+          ? '${message.text.substring(0, 180)}…'
+          : message.text;
+      turns.insert(0, '$who : $body');
+    }
+    return turns;
   }
 
   /// Lui apprend un mot et sa définition.
@@ -149,12 +251,17 @@ class NexusController extends ChangeNotifier {
 
     final result = brain.teach(word, definition);
     _messages.add(
-      ChatMessage(text: result.reply, fromNexus: true, at: DateTime.now()),
+      ChatMessage(
+        text: 'J\'ai retenu : ${word.trim()} — ${definition.trim()}',
+        fromNexus: true,
+        at: DateTime.now(),
+      ),
     );
     if (result.stageUp) {
       _messages.add(
         ChatMessage.system(
-          'Nexus grandit : ${brain.state.stage.label} ${brain.state.stage.emoji}',
+          'Nexus grandit : ${brain.state.stage.label} '
+          '${brain.state.stage.emoji}',
         ),
       );
     }
@@ -165,6 +272,16 @@ class NexusController extends ChangeNotifier {
     }
     await _store.save(brain.state);
     return result;
+  }
+
+  /// Change les règles de personnalité écrites par son humain.
+  Future<void> setPersona(String rules) async {
+    final brain = _brain;
+    if (brain == null) return;
+
+    brain.state.persona = rules.trim();
+    _notify();
+    await _store.save(brain.state);
   }
 
   /// Allume ou éteint la voix de Nexus.
@@ -205,11 +322,12 @@ class NexusController extends ChangeNotifier {
   /// Ouvre la page des releases, quand le manifeste est absent.
   Future<bool> openReleases() => updates.openReleases();
 
-  /// Efface tout et le fait renaître.
+  /// Efface tout et le fait renaître (le cerveau reste installé).
   Future<void> reset() async {
     await _store.wipe();
     _brain = null;
     _messages.clear();
+    _partial = '';
     _lastUpdateCheck = null;
     _notify();
   }
