@@ -1,7 +1,7 @@
 name: nexus
 description: "Nexus — une IA qui naît sur ton téléphone et grandit avec toi."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -13,6 +13,9 @@ dependencies:
   path_provider: ^2.1.4
   nexus_core:
     path: packages/nexus_core
+  flutter_tts: ^4.2.5
+  url_launcher: ^6.3.3
+  crypto: ^3.0.8
 
 dev_dependencies:
   flutter_test:
