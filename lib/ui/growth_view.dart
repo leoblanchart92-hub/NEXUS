@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:nexus_core/nexus_core.dart';
 
+import '../config.dart';
 import '../controller/nexus_controller.dart';
+import '../data/update_service.dart';
 import '../theme.dart';
+import 'lesson_sheet.dart';
 
 /// L'onglet « Grandir » : tout ce que Nexus est devenu.
 class GrowthView extends StatelessWidget {
@@ -15,6 +18,7 @@ class GrowthView extends StatelessWidget {
     final state = controller.state!;
     final next = state.stage.nextStage;
     final words = state.lexicon.topWords;
+    final lessons = state.memory.lessonList.reversed.toList();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -80,10 +84,89 @@ class GrowthView extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 next == null
-                    ? 'Il a atteint son dernier stade. Il continue d\'apprendre.'
+                    ? "Il a atteint son dernier stade. Il continue d'apprendre."
                     : 'Prochain stade : ${next.label} dans ${state.xpToNextStage} xp',
                 style: const TextStyle(color: NexusColors.muted, fontSize: 12),
               ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Expanded(child: _CardTitle('Son école')),
+                  Text(
+                    '${lessons.length} leçon${lessons.length > 1 ? 's' : ''}',
+                    style: const TextStyle(
+                      color: NexusColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                lessons.isEmpty
+                    ? "Il ne connaît encore rien du monde. Apprends-lui un mot, il s'en souviendra."
+                    : "Il a retenu ${lessons.length} leçon${lessons.length > 1 ? 's' : ''}. Demande-lui « c'est quoi… » ou « récite-moi ».",
+                style: const TextStyle(
+                  color: NexusColors.muted,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => LessonSheet.show(context, controller),
+                  icon: const Icon(Icons.school_outlined, size: 18),
+                  label: const Text('Lui apprendre un mot'),
+                ),
+              ),
+              if (lessons.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 14),
+                for (final lesson in lessons.take(5))
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const Icon(
+                          Icons.menu_book,
+                          size: 14,
+                          color: NexusColors.violet,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
+                              style: const TextStyle(
+                                fontSize: 13,
+                                height: 1.4,
+                                color: NexusColors.muted,
+                              ),
+                              children: <TextSpan>[
+                                TextSpan(
+                                  text: '${lesson.word} : ',
+                                  style: const TextStyle(
+                                    color: NexusColors.text,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                TextSpan(text: lesson.definition),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ],
           ),
         ),
@@ -126,18 +209,13 @@ class GrowthView extends StatelessWidget {
               const SizedBox(height: 14),
               Row(
                 children: <Widget>[
-                  _Stat(
-                    value: '${state.lexicon.size}',
-                    label: 'mots',
-                  ),
-                  _Stat(
-                    value: '${state.exchanges}',
-                    label: 'échanges',
-                  ),
+                  _Stat(value: '${state.lexicon.size}', label: 'mots'),
+                  _Stat(value: '${state.exchanges}', label: 'échanges'),
                   _Stat(
                     value: '${state.memory.episodes.length}',
                     label: 'souvenirs',
                   ),
+                  _Stat(value: '${lessons.length}', label: 'leçons'),
                 ],
               ),
             ],
@@ -208,6 +286,8 @@ class GrowthView extends StatelessWidget {
             ),
           ),
         ],
+        const SizedBox(height: 14),
+        _UpdatesCard(controller: controller),
         const SizedBox(height: 22),
         TextButton.icon(
           onPressed: () => _confirmReset(context),
@@ -228,7 +308,7 @@ class GrowthView extends StatelessWidget {
         backgroundColor: NexusColors.surfaceHigh,
         title: const Text('Le faire renaître ?'),
         content: const Text(
-          'Tout son vocabulaire et tous ses souvenirs seront effacés. '
+          'Tout son vocabulaire, ses leçons et ses souvenirs seront effacés. '
           'Nexus redeviendra un nouveau-né.',
         ),
         actions: <Widget>[
@@ -238,7 +318,10 @@ class GrowthView extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Effacer', style: TextStyle(color: NexusColors.rose)),
+            child: const Text(
+              'Effacer',
+              style: TextStyle(color: NexusColors.rose),
+            ),
           ),
         ],
       ),
@@ -247,6 +330,101 @@ class GrowthView extends StatelessWidget {
     if (confirmed == true) {
       await controller.reset();
     }
+  }
+}
+
+/// Les mises à jour : verrouillées sans clé, vérifiées par signature.
+class _UpdatesCard extends StatelessWidget {
+  const _UpdatesCard({required this.controller});
+
+  final NexusController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final unlocked = controller.updates.isUnlocked;
+    final check = controller.lastUpdateCheck;
+    final checking = controller.isCheckingUpdate;
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Expanded(child: _CardTitle('Mises à jour')),
+              Icon(
+                unlocked ? Icons.lock_open_rounded : Icons.lock_rounded,
+                size: 15,
+                color: unlocked ? NexusColors.mint : NexusColors.muted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            unlocked
+                ? 'Version ${AppConfig.version}. Chaque mise à jour est vérifiée par signature : sans la clé, elle est refusée.'
+                : "Verrouillées : cette version a été compilée sans clé de mise à jour.",
+            style: const TextStyle(
+              color: NexusColors.muted,
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+          if (check != null) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              check.message,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: switch (check.status) {
+                  UpdateStatus.available => NexusColors.mint,
+                  UpdateStatus.invalid => NexusColors.rose,
+                  UpdateStatus.failed => NexusColors.rose,
+                  _ => NexusColors.muted,
+                },
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          if (!unlocked)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => controller.openReleases(),
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: const Text('Ouvrir la page des versions'),
+              ),
+            )
+          else if (check?.hasUpdate ?? false)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => controller.openUpdate(),
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: const Text("Télécharger l'APK"),
+              ),
+            )
+          else
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: checking ? null : controller.checkForUpdates,
+                icon: checking
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh_rounded, size: 16),
+                label: Text(
+                  checking ? 'Vérification…' : 'Vérifier les mises à jour',
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -342,12 +520,12 @@ class _Stat extends StatelessWidget {
         children: <Widget>[
           Text(
             value,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(fontSize: 12, color: NexusColors.muted),
+            style: const TextStyle(fontSize: 11.5, color: NexusColors.muted),
           ),
         ],
       ),
