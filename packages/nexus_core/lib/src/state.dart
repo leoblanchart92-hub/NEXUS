@@ -16,6 +16,7 @@ class NexusState {
     this.affection = 0.5,
     this.assurance = 0.15,
     this.voiceEnabled = false,
+    this.persona = '',
     Lexicon? lexicon,
     Memory? memory,
     Needs? needs,
@@ -35,6 +36,10 @@ class NexusState {
 
   /// Si vrai, Nexus prononce ses réponses à voix haute.
   bool voiceEnabled;
+
+  /// Les règles de personnalité écrites par son humain. Injectées dans
+  /// chaque tour de parole : c'est ce qui la dirige.
+  String persona;
 
   final Lexicon lexicon;
   final Memory memory;
@@ -73,6 +78,7 @@ class NexusState {
         'affection': affection,
         'assurance': assurance,
         'voiceEnabled': voiceEnabled,
+        'persona': persona,
         'lexicon': lexicon.toJson(),
         'memory': memory.toJson(),
         'needs': needs.toJson(),
@@ -92,6 +98,7 @@ class NexusState {
       affection: (json['affection'] as num?)?.toDouble() ?? 0.5,
       assurance: (json['assurance'] as num?)?.toDouble() ?? 0.15,
       voiceEnabled: (json['voiceEnabled'] as bool?) ?? false,
+      persona: (json['persona'] as String?) ?? '',
       lexicon: rawLexicon is Map
           ? Lexicon.fromJson(Map<String, dynamic>.from(rawLexicon))
           : null,
