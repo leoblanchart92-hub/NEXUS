@@ -1,4 +1,4 @@
-/// Un souvenir : une phrase que son parent lui a demandé de retenir.
+/// Un souvenir : une phrase que Nexus a retenue de son humain.
 class Episode {
   const Episode({required this.text, required this.at});
 
@@ -16,7 +16,7 @@ class Episode {
       );
 }
 
-/// Une leçon : un mot et ce qu'il veut dire, appris explicitement.
+/// Une leçon : un mot et ce qu'il veut dire, retenu en discutant.
 class Lesson {
   const Lesson({
     required this.word,
@@ -41,7 +41,10 @@ class Lesson {
       );
 }
 
-/// La mémoire de Nexus : des faits sur son parent, des souvenirs et des leçons.
+/// La mémoire de Nexus : des faits sur son humain, des souvenirs et des leçons.
+///
+/// Elle commence vide à la naissance et se remplit toute seule, au fil des
+/// conversations.
 class Memory {
   Memory({
     Map<String, String>? facts,
@@ -51,7 +54,7 @@ class Memory {
         episodes = episodes ?? <Episode>[],
         lessons = lessons ?? <String, Lesson>{};
 
-  /// faits clés/valeurs, par exemple `user.name` -> `Léo`.
+  /// faits clés/valeurs : `prenom` -> `Léo`, `ville` -> `Lyon`…
   final Map<String, String> facts;
 
   /// Les souvenirs, du plus ancien au plus récent.
@@ -60,18 +63,38 @@ class Memory {
   /// Les leçons, indexées par mot en minuscules.
   final Map<String, Lesson> lessons;
 
-  static const int maxEpisodes = 120;
-  static const int maxLessons = 500;
+  static const int maxFacts = 80;
+  static const int maxEpisodes = 200;
+  static const int maxLessons = 200;
+
+  /// Nombre total de choses retenues.
+  int get size => facts.length + episodes.length + lessons.length;
+
+  bool get isEmpty => size == 0;
 
   String? fact(String key) => facts[key];
 
   void setFact(String key, String value) {
-    facts[key] = value;
+    final cleanKey = key.trim();
+    final cleanValue = value.trim();
+    if (cleanKey.isEmpty || cleanValue.isEmpty) return;
+
+    if (facts.length >= maxFacts && !facts.containsKey(cleanKey)) {
+      // La mémoire est pleine : on remplace le fait le plus ancien.
+      facts.remove(facts.keys.first);
+    }
+    facts[cleanKey] = cleanValue;
   }
 
+  /// Retient un souvenir, sans doublon avec les dix derniers.
   void remember(String text, DateTime at) {
     final clean = text.trim();
     if (clean.isEmpty) return;
+
+    for (final recent in episodes.reversed.take(10)) {
+      if (recent.text.toLowerCase() == clean.toLowerCase()) return;
+    }
+
     episodes.add(Episode(text: clean, at: at));
     while (episodes.length > maxEpisodes) {
       episodes.removeAt(0);
@@ -87,7 +110,7 @@ class Memory {
     if (cleanWord.isEmpty || cleanDefinition.isEmpty) return;
 
     if (lessons.length >= maxLessons && !lessons.containsKey(_key(cleanWord))) {
-      return;
+      lessons.remove(lessons.keys.first);
     }
     lessons[_key(cleanWord)] = Lesson(
       word: cleanWord,
@@ -103,6 +126,13 @@ class Memory {
     final all = lessons.values.toList()
       ..sort((a, b) => a.at.compareTo(b.at));
     return all;
+  }
+
+  /// Efface tout ce qu'elle a appris (elle redevient une page blanche).
+  void forgetAll() {
+    facts.clear();
+    episodes.clear();
+    lessons.clear();
   }
 
   String _key(String word) => word.trim().toLowerCase();
