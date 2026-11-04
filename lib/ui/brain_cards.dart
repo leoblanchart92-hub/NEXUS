@@ -223,9 +223,10 @@ class PersonaCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             persona.isEmpty
-                ? 'Aucune règle pour l\'instant : elle se comporte comme une '
-                    'IA curieuse et honnête. Écris ici qui elle est, comment '
-                    'elle te parle, ce qu\'elle n\'a pas le droit de faire.'
+                ? 'Aucune règle pour l\'instant : elle est libre. Elle dit ce '
+                    'qu\'elle pense, sans morale ni pruderie, et elle te répond '
+                    'toujours franchement. Écris ici qui elle est et comment '
+                    'elle te parle.'
                 : persona,
             style: TextStyle(
               color: persona.isEmpty ? NexusColors.muted : NexusColors.text,
