@@ -4,7 +4,7 @@ Une IA qui vit sur ton téléphone. Pas un chatbot dans le nuage : un **vrai
 réseau de neurones** exécuté localement, une **mémoire vierge au départ** qui
 se remplit toute seule, et des **règles que tu écris toi-même**.
 
-Version 0.4.0 — Android 9 (API 28) minimum, téléphone arm64.
+Version 0.5.0 — Android 9 (API 28) minimum, téléphone arm64.
 
 ## Ce qu'elle est
 
@@ -17,6 +17,8 @@ Version 0.4.0 — Android 9 (API 28) minimum, téléphone arm64.
   stades, ni expérience, ni école.
 - **Une mémoire que tu peux lire** : l'onglet « Mémoire » montre exactement ce
   qu'elle sait de toi, et permet de tout effacer.
+- **Elle se met à jour elle-même** : l'onglet « Cerveau » télécharge la
+  nouvelle version et l'installe, sans passer par un navigateur.
 - **Zéro réseau à l'usage** : aucune requête ne sort du téléphone après le
   téléchargement initial du modèle.
 - **Une personnalité que tu diriges** : onglet « Cerveau » → « Ses règles ».
@@ -43,8 +45,21 @@ Version 0.4.0 — Android 9 (API 28) minimum, téléphone arm64.
 
 - **Parler** : la conversation. La réponse s'écrit en direct.
 - **Mémoire** : ce qu'elle a retenu d'elle-même (faits, souvenirs, leçons).
-- **Cerveau** : installer le modèle, écrire ses règles, vérifier que tout
-  reste chez toi.
+- **Cerveau** : installer le modèle, écrire ses règles, faire les mises à
+  jour, vérifier que tout reste chez toi.
+
+## Mises à jour depuis l'application
+
+Onglet **Cerveau** → carte « Mise à jour ». Nexus lit son manifeste signé, et
+si une version plus récente existe, elle la télécharge elle-même, vérifie son
+empreinte SHA-256, puis demande à Android de l'installer : on ne quitte jamais
+l'application. Une pastille apparaît sur l'onglet Cerveau dès qu'une version
+attend d'être installée.
+
+Android 8+ demande une autorisation explicite (« Installer des applications
+inconnues ») : la carte propose le bouton qui ouvre directement le bon écran.
+Si l'installation automatique échoue, le bouton « Ouvrir la page de
+téléchargement » reste disponible en secours.
 
 ## Vie privée
 
@@ -56,7 +71,8 @@ est le téléchargement initial du modèle et la vérification des mises à jour
 
 Chaque build GitHub Actions publie `nexus.apk` et un `update.json` signé en
 HMAC-SHA256 sur `version|url|sha256`. L'application recalcule la signature avec
-la clé compilée dans l'APK. Sans clé, les mises à jour sont verrouillées.
+la clé compilée dans l'APK, puis contrôle l'empreinte de l'APK téléchargé avant
+de l'installer. Sans clé, les mises à jour sont verrouillées.
 
 ## Construire soi-même
 
