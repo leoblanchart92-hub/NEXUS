@@ -64,11 +64,20 @@ jobs:
             --build-number="${{ github.run_number }}"
           cp build/app/outputs/flutter-apk/app-release.apk nexus.apk
 
+      # Preuve que la mise à jour pourra s'installer par-dessus l'existante :
+      # l'APK doit porter l'empreinte de la clé versionnée dans le dépôt.
       - name: Vérifier la signature de l'APK
         run: |
           set -euo pipefail
-          APKSHA=$(sha256sum android/app/key.jks | cut -d' ' -f1)
-          echo "Empreinte de la clé utilisée : $APKSHA"
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          FOUND=$("$APKSIGNER" verify --print-certs nexus.apk | grep -m1 'certificate SHA-256 digest' | awk '{print $NF}' | tr 'A-F' 'a-f')
+          EXPECTED=b0470004f168dfa9925a60fa79832ef30f3a61fa32fb20c544876303f0a06b0
+          echo "Empreinte de signature : $FOUND"
+          if [ "$FOUND" != "$EXPECTED" ]; then
+            echo "::error::APK signé avec une autre clé que celle du dépôt."
+            exit 1
+          fi
+          echo "Signature conforme : les mises à jour s'installeront par-dessus."
 
       - name: Publier la release signée
         if: github.ref == 'refs/heads/main'
