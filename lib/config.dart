@@ -5,7 +5,7 @@
 /// GitHub Actions.
 class AppConfig {
   /// Version affichée par Nexus, synchronisée avec `pubspec.yaml`.
-  static const String version = '0.2.0';
+  static const String version = '0.3.0';
 
   static const String owner = 'leoblanchart92-hub';
   static const String repository = 'NEXUS';
@@ -22,4 +22,21 @@ class AppConfig {
   static const String updateKey = String.fromEnvironment('NEXUS_UPDATE_KEY');
 
   static bool get updatesUnlocked => updateKey.isNotEmpty;
+
+  /// Le cerveau : Qwen3-1.7B quantifié (Q4_K_M), un vrai réseau de neurones
+  /// qui tourne en local avec llama.cpp. Téléchargé une seule fois, puis
+  /// exécuté hors ligne, sans aucune connexion ni compte.
+  static const String brainUrl =
+      'https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/'
+      'Qwen3-1.7B-Q4_K_M.gguf';
+
+  /// Nom sous lequel le fichier est installé sur le téléphone.
+  static const String brainFile = 'Qwen3-1.7B-Q4_K_M.gguf';
+
+  /// Taille annoncée du fichier, en octets (1,03 Gio).
+  static const int brainBytes = 1107409472;
+
+  /// Fenêtre de contexte : assez pour la personnalité, la mémoire et la
+  /// conversation en cours, sans faire exploser la mémoire vive du téléphone.
+  static const int contextTokens = 2048;
 }

@@ -1,7 +1,7 @@
 name: nexus
 description: "Nexus — une IA qui naît sur ton téléphone et grandit avec toi."
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.3.0+3
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -16,6 +16,9 @@ dependencies:
   flutter_tts: ^4.2.5
   url_launcher: ^6.3.3
   crypto: ^3.0.8
+  # Vrai modèle de neurones, exécuté sur le téléphone par llama.cpp.
+  flutter_edge_ai: ^2.5.5
+  flutter_edge_ai_llama: ^0.0.5
 
 dev_dependencies:
   flutter_test:
@@ -24,3 +27,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+# Force llama.cpp comme unique moteur natif embarqué (pas de LiteRT-LM).
+hooks:
+  user_defines:
+    llamadart:
+      llamadart_native_runtimes: [llama_cpp]
