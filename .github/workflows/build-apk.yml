@@ -1,0 +1,106 @@
+name: Construire l'APK
+
+# À chaque envoi sur main, GitHub construit l'APK, le signe et le publie dans
+# une release "latest". L'application le voit ensuite grâce à update.json.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: APK release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Installer Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Tests du cerveau
+        working-directory: packages/nexus_core
+        run: |
+          dart pub get
+          dart test
+
+      - name: Dépendances de l'application
+        run: flutter pub get
+
+      - name: Analyse statique
+        run: flutter analyze
+
+      - name: Construire l'APK
+        env:
+          NEXUS_UPDATE_KEY: ${{ secrets.NEXUS_UPDATE_KEY }}
+        run: |
+          if [ -z "$NEXUS_UPDATE_KEY" ]; then
+            echo "::warning::Secret NEXUS_UPDATE_KEY absent : l'APK ne pourra pas se mettre à jour."
+          fi
+          flutter build apk --release \
+            --dart-define=NEXUS_UPDATE_KEY="$NEXUS_UPDATE_KEY" \
+            --build-name="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')" \
+            --build-number="${{ github.run_number }}"
+          cp build/app/outputs/flutter-apk/app-release.apk nexus.apk
+
+      - name: Publier la release signée
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXUS_UPDATE_KEY: ${{ secrets.NEXUS_UPDATE_KEY }}
+        run: |
+          set -euo pipefail
+          VERSION="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"
+          URL="https://github.com/${{ github.repository }}/releases/download/latest/nexus.apk"
+          SHA="$(sha256sum nexus.apk | cut -d' ' -f1)"
+
+          if [ -z "$NEXUS_UPDATE_KEY" ]; then
+            echo "::warning::Pas de clé : publication d'un APK sans manifeste de mise à jour."
+            gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+            gh release create latest nexus.apk \
+              --title "Nexus $VERSION" \
+              --notes "Build automatique de la version $VERSION." \
+              --latest
+            exit 0
+          fi
+
+          # Le manifeste est signé avec la même clé que celle compilée dans l'APK.
+          SIGNATURE="$(printf '%s' "$VERSION|$URL|$SHA" \
+            | openssl dgst -sha256 -hmac "$NEXUS_UPDATE_KEY" -hex \
+            | awk '{print $NF}')"
+
+          cat > update.json <<EOF
+          {
+            "version": "$VERSION",
+            "url": "$URL",
+            "sha256": "$SHA",
+            "notes": "Build automatique du commit ${{ github.sha }}.",
+            "signature": "$SIGNATURE"
+          }
+          EOF
+
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest nexus.apk update.json \
+            --title "Nexus $VERSION" \
+            --notes "Build automatique. APK : \`nexus.apk\` — empreinte SHA-256 : \`$SHA\`" \
+            --latest
+
+      - name: Garder l'APK en artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-apk
+          path: nexus.apk
+          retention-days: 30

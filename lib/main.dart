@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'controller/nexus_controller.dart';
 import 'data/nexus_store.dart';
+import 'data/tts_service.dart';
+import 'data/update_service.dart';
 import 'theme.dart';
 import 'ui/birth_screen.dart';
 import 'ui/nexus_screen.dart';
@@ -27,7 +29,11 @@ class _NexusAppState extends State<NexusApp> {
   @override
   void initState() {
     super.initState();
-    _controller = NexusController(widget.store);
+    _controller = NexusController(
+      widget.store,
+      tts: TtsService(),
+      updates: UpdateService(),
+    );
     _controller.load();
   }
 
