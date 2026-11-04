@@ -119,6 +119,8 @@ class NexusController extends ChangeNotifier {
   Future<void> load() async {
     final saved = await _store.load();
     if (saved != null) {
+      // Son nom ne se choisit pas : c'est Nexus.
+      saved.name = 'Nexus';
       _state = saved;
       _messages.add(
         ChatMessage(
@@ -151,11 +153,10 @@ class NexusController extends ChangeNotifier {
     _notify();
   }
 
-  /// La naissance : Nexus commence sa vie avec un nom et rien d'autre.
-  Future<void> beBorn(String chosenName) async {
-    final trimmed = chosenName.trim();
+  /// La naissance : Nexus commence sa vie, et son nom est toujours Nexus.
+  Future<void> beBorn() async {
     final state = NexusState(
-      name: trimmed.isEmpty ? 'Nexus' : trimmed,
+      name: 'Nexus',
       bornAt: DateTime.now(),
     );
     _state = state;
