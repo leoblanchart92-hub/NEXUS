@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:nexus_core/nexus_core.dart';
 
+import '../data/brain_catalogue.dart';
 import '../data/llm_service.dart';
 import '../data/nexus_prompt.dart';
 import '../data/nexus_store.dart';
@@ -100,6 +101,15 @@ class NexusController extends ChangeNotifier {
   bool get brainReady => _llm.isReady;
   bool get brainBusy => _llm.isBusy;
 
+  /// Tous les cerveaux locaux proposés, du plus léger au plus capable.
+  List<BrainVariant> get brains => brainCatalogue;
+
+  /// Le cerveau choisi (allumé, ou en cours d'allumage).
+  BrainVariant get activeBrain => _llm.brain;
+
+  /// Vrai si le fichier de ce cerveau est déjà sur le téléphone.
+  bool isBrainInstalled(BrainVariant brain) => _llm.isBrainInstalled(brain);
+
   /// Les règles de personnalité écrites par son humain.
   String get persona => _state?.persona ?? '';
 
@@ -174,18 +184,20 @@ class NexusController extends ChangeNotifier {
     await _store.save(state);
   }
 
-  /// Télécharge le cerveau neuronal (1,03 Gio) puis le charge.
-  Future<void> downloadBrain() async {
-    if (_llm.isBusy || _llm.isReady) return;
+  /// Allume un cerveau : le télécharge s'il manque, sinon réutilise le
+  /// fichier déjà présent, puis le charge en mémoire.
+  Future<void> useBrain(BrainVariant brain) async {
+    if (_llm.isBusy) return;
+    if (_llm.isReady && _llm.brain.id == brain.id) return;
 
-    await _llm.download(onProgress: (_) => _notify());
+    await _llm.installBrain(brain, onProgress: (_) => _notify());
     _notify();
 
     if (_llm.status == BrainStatus.ready) {
       _messages.add(
         ChatMessage.system(
-          'Son cerveau neuronal est réveillé : Nexus pense maintenant par '
-          'elle-même, entièrement sur ton téléphone.',
+          'Cerveau allumé : ${brain.label} (${brain.sizeLabel}), '
+          'entièrement sur ton téléphone.',
         ),
       );
     } else if (_llm.status == BrainStatus.failed) {
