@@ -80,9 +80,10 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = controller.state!;
+    final voiceOn = state.voiceEnabled;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
+      padding: const EdgeInsets.fromLTRB(18, 12, 12, 10),
       child: Row(
         children: <Widget>[
           NexusOrb(size: 52, color: orbColorFor(state.needs)),
@@ -130,6 +131,14 @@ class _Header extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => controller.setVoice(!voiceOn),
+            tooltip: voiceOn ? 'Couper la voix' : 'Faire parler Nexus',
+            icon: Icon(
+              voiceOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+              color: voiceOn ? NexusColors.mint : NexusColors.muted,
             ),
           ),
         ],
