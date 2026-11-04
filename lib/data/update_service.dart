@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
@@ -64,10 +66,23 @@ class UpdateCheck {
   bool get hasUpdate => status == UpdateStatus.available;
 }
 
-/// Vérifie les mises à jour à partir d'un manifeste signé par HMAC-SHA256.
+/// Une mise à jour qui échoue, avec une raison lisible par son humain.
+class UpdateException implements Exception {
+  UpdateException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Vérifie, télécharge et installe les mises à jour signées en HMAC-SHA256.
 ///
 /// Le principe : une mise à jour n'est proposée que si la signature correspond
 /// à la clé. Sans la clé, l'application refuse tout manifeste, même valide.
+/// Ensuite, l'APK téléchargé doit avoir exactement l'empreinte annoncée par le
+/// manifeste, sinon il est supprimé : un fichier altéré en route ne peut pas
+/// être installé.
 class UpdateService {
   UpdateService({
     this.manifestUrl = AppConfig.updateManifestUrl,
@@ -78,6 +93,9 @@ class UpdateService {
   final String manifestUrl;
   final String key;
   final String currentVersion;
+
+  /// Le canal natif qui confie l'APK au programme d'installation d'Android.
+  static const MethodChannel _installer = MethodChannel('nexus/installer');
 
   bool get isUnlocked => key.isNotEmpty;
 
@@ -109,7 +127,8 @@ class UpdateService {
         );
       }
 
-      final manifest = UpdateManifest.fromJson(Map<String, dynamic>.from(decoded));
+      final manifest =
+          UpdateManifest.fromJson(Map<String, dynamic>.from(decoded));
       if (!verifySignature(manifest)) {
         return const UpdateCheck(
           UpdateStatus.invalid,
@@ -138,6 +157,110 @@ class UpdateService {
     }
   }
 
+  /// Télécharge l'APK signé, contrôle son empreinte SHA-256 et le garde sur le
+  /// téléphone jusqu'à l'installation.
+  ///
+  /// [onProgress] reçoit une valeur entre 0 et 1.
+  Future<File> downloadApk(
+    UpdateManifest manifest, {
+    void Function(double progress)? onProgress,
+  }) async {
+    if (manifest.sha256.isEmpty) {
+      throw UpdateException("Le manifeste ne donne pas d'empreinte.");
+    }
+
+    final directory = await _updateDirectory();
+    final target = File('${directory.path}/nexus-${manifest.version}.apk');
+    if (target.existsSync()) {
+      await target.delete();
+    }
+
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15);
+    IOSink? sink;
+
+    try {
+      final request = await client.getUrl(Uri.parse(manifest.url));
+      request.headers.set(HttpHeaders.acceptHeader, 'application/octet-stream');
+      final response =
+          await request.close().timeout(const Duration(seconds: 30));
+      if (response.statusCode != HttpStatus.ok) {
+        throw UpdateException(
+          'Téléchargement refusé (HTTP ${response.statusCode}).',
+        );
+      }
+
+      final total = response.contentLength;
+      var received = 0;
+      sink = target.openWrite();
+      await for (final List<int> chunk in response) {
+        sink.add(chunk);
+        received += chunk.length;
+        if (total > 0) onProgress?.call(received / total);
+      }
+      await sink.flush();
+      await sink.close();
+      sink = null;
+
+      if (received == 0) {
+        throw UpdateException('Le fichier reçu est vide.');
+      }
+
+      final digest = await sha256.bind(target.openRead()).first;
+      if (digest.toString().toLowerCase() != manifest.sha256.toLowerCase()) {
+        await target.delete();
+        throw UpdateException(
+          'Empreinte incorrecte : le fichier a été altéré, il est refusé.',
+        );
+      }
+
+      onProgress?.call(1);
+      return target;
+    } on UpdateException {
+      rethrow;
+    } catch (error) {
+      if (target.existsSync()) {
+        await target.delete();
+      }
+      throw UpdateException('Téléchargement impossible : $error');
+    } finally {
+      await sink?.close();
+      client.close(force: true);
+    }
+  }
+
+  /// Android 8+ exige une autorisation explicite avant d'installer un APK
+  /// téléchargé hors magasin.
+  Future<bool> canInstallPackages() async {
+    try {
+      return await _installer.invokeMethod<bool>('canInstall') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Ouvre l'écran système qui autorise Nexus à installer ses mises à jour.
+  Future<bool> requestInstallPermission() async {
+    try {
+      return await _installer.invokeMethod<bool>('openInstallSettings') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Confie l'APK au programme d'installation d'Android.
+  Future<bool> installApk(File apk) async {
+    try {
+      final opened =
+          await _installer.invokeMethod<bool>('install', <String, dynamic>{
+        'path': apk.path,
+      });
+      return opened ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Ouvre la page de téléchargement de l'APK signé.
   Future<bool> openDownload(UpdateManifest manifest) async {
     final uri = Uri.tryParse(manifest.url);
@@ -158,6 +281,15 @@ class UpdateService {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<Directory> _updateDirectory() async {
+    final base = await getApplicationSupportDirectory();
+    final directory = Directory('${base.path}/updates');
+    if (!directory.existsSync()) {
+      await directory.create(recursive: true);
+    }
+    return directory;
   }
 
   Future<String> _fetch(String url) async {
