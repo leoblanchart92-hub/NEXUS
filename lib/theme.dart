@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:nexus_core/nexus_core.dart';
-
 /// Les couleurs de Nexus : nuit profonde, violet de nébuleuse.
 class NexusColors {
   static const Color background = Color(0xFF07061A);
@@ -14,15 +12,6 @@ class NexusColors {
   static const Color text = Color(0xFFE9E7FF);
   static const Color muted = Color(0xFF9A94C4);
 }
-
-/// Couleur de la boule de conscience selon l'humeur de Nexus.
-Color orbColorFor(Needs needs) => switch (needs.mood) {
-      'en manque de toi' => NexusColors.rose,
-      'fatigué' => const Color(0xFF7C83FD),
-      'curieux' => NexusColors.mint,
-      'comblé' => NexusColors.amber,
-      _ => NexusColors.violet,
-    };
 
 ThemeData buildNexusTheme() {
   final base = ThemeData.dark(useMaterial3: true);

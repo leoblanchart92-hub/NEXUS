@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:nexus_core/nexus_core.dart';
 
 import '../controller/nexus_controller.dart';
 import '../theme.dart';
@@ -89,8 +88,8 @@ class _ChatViewState extends State<ChatView> {
                     onSubmitted: (_) => _send(),
                     minLines: 1,
                     maxLines: 4,
-                    decoration: InputDecoration(
-                      hintText: _hintFor(widget.controller.state!.stage),
+                    decoration: const InputDecoration(
+                      hintText: 'Écris-lui quelque chose…',
                     ),
                   ),
                 ),
@@ -110,13 +109,6 @@ class _ChatViewState extends State<ChatView> {
       ],
     );
   }
-
-  String _hintFor(Stage stage) => switch (stage) {
-        Stage.nouveauNe => 'Parle-lui, même à vide…',
-        Stage.nourrisson => 'Dis-lui un mot…',
-        Stage.petitParleur => 'Apprends-lui une phrase…',
-        _ => 'Écris-lui quelque chose…',
-      };
 }
 
 class _ThinkingBubble extends StatelessWidget {
