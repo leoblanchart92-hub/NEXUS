@@ -140,6 +140,18 @@ class UpdateCard extends StatelessWidget {
             ),
           ),
         ],
+        const SizedBox(height: 10),
+        const Text(
+          "Si Android répond « paquet en conflit », c'est qu'une version plus "
+          'ancienne est encore là avec une autre signature : désinstalle-la '
+          'une seule fois, puis réinstalle. Les suivantes passent sans rien '
+          'perdre.',
+          style: TextStyle(
+            color: NexusColors.muted,
+            fontSize: 11.5,
+            height: 1.4,
+          ),
+        ),
       ];
     }
 
