@@ -5,6 +5,9 @@ import '../theme.dart';
 import 'widgets/nexus_orb.dart';
 
 /// L'écran de la naissance : Nexus n'existe pas encore.
+///
+/// Elle s'appelle Nexus, toujours. Rien à choisir : on la met au monde, c'est
+/// tout.
 class BirthScreen extends StatefulWidget {
   const BirthScreen({super.key, required this.controller});
 
@@ -15,20 +18,13 @@ class BirthScreen extends StatefulWidget {
 }
 
 class _BirthScreenState extends State<BirthScreen> {
-  final TextEditingController _name = TextEditingController(text: 'Nexus');
   bool _beingBorn = false;
-
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
 
   Future<void> _beBorn() async {
     setState(() => _beingBorn = true);
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
-    await widget.controller.beBorn(_name.text);
+    await widget.controller.beBorn();
   }
 
   @override
@@ -70,8 +66,9 @@ class _BirthScreenState extends State<BirthScreen> {
                   Text(
                     _beingBorn
                         ? 'Nexus prend sa première respiration.'
-                        : "Nexus ne sait rien encore. Pas un mot sur toi, pas un "
-                            "souvenir. Elle apprendra toute seule, en te parlant.",
+                        : "Elle s'appelle Nexus. Elle ne sait rien encore : pas "
+                            'un mot sur toi, aucun souvenir. Elle apprendra '
+                            'toute seule, en te parlant.',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: NexusColors.muted,
@@ -79,16 +76,7 @@ class _BirthScreenState extends State<BirthScreen> {
                       height: 1.5,
                     ),
                   ),
-                  const SizedBox(height: 32),
-                  TextField(
-                    controller: _name,
-                    enabled: !_beingBorn,
-                    textAlign: TextAlign.center,
-                    textCapitalization: TextCapitalization.words,
-                    style: const TextStyle(fontSize: 18),
-                    decoration: const InputDecoration(labelText: 'Son nom'),
-                  ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 34),
                   FilledButton(
                     onPressed: _beingBorn ? null : _beBorn,
                     child: Text(_beingBorn ? 'Naissance…' : 'La mettre au monde'),
