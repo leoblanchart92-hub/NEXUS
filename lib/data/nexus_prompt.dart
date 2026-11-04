@@ -15,10 +15,8 @@ String buildPromptContext(
 
   buffer.writeln('=== QUI TU ES ===');
   buffer.writeln(
-    'Ton nom est ${state.name}. Tu as ${state.ageInDays} jour'
-    '${state.ageInDays > 1 ? 's' : ''} de vie. '
-    'Ton stade de croissance : ${state.stage.label}. '
-    'Ton état intérieur en ce moment : ${state.needs.mood}.',
+    'Ton nom est ${state.name}. Tu vis depuis ${state.ageInDays} jour'
+    '${state.ageInDays > 1 ? 's' : ''}.',
   );
 
   final rules = state.persona.trim();
@@ -33,8 +31,7 @@ String buildPromptContext(
     buffer.writeln();
     buffer.writeln('=== CE QUE TU SAIS DE LUI ===');
     facts.forEach((String key, String value) {
-      final label = key.startsWith('user.') ? key.substring(5) : key;
-      buffer.writeln('- $label : $value');
+      buffer.writeln('- ${key.replaceAll('_', ' ')} : $value');
     });
   }
 
@@ -42,7 +39,7 @@ String buildPromptContext(
   if (episodes.isNotEmpty) {
     buffer.writeln();
     buffer.writeln('=== TES SOUVENIRS (du plus récent au plus ancien) ===');
-    for (final Episode episode in episodes.reversed.take(12)) {
+    for (final Episode episode in episodes.reversed.take(15)) {
       buffer.writeln('- ${episode.text}');
     }
   }
@@ -50,7 +47,7 @@ String buildPromptContext(
   final lessons = state.memory.lessonList;
   if (lessons.isNotEmpty) {
     buffer.writeln();
-    buffer.writeln("=== CE QU'IL T'A APPRIS (tu le sais vraiment) ===");
+    buffer.writeln('=== CE QUE TU AS APPRIS ===');
     for (final Lesson lesson in lessons.reversed.take(30)) {
       buffer.writeln('- ${lesson.word} : ${lesson.definition}');
     }
@@ -77,4 +74,37 @@ String buildPromptContext(
   return '${text.substring(0, maxChars)}\n'
       '[contexte tronqué : ta mémoire est plus grande que ta fenêtre de '
       'parole actuelle]';
+}
+
+/// Demande au modèle de décider lui-même ce qu'il retient de l'échange.
+///
+/// C'est là que se joue l'apprentissage automatique : aucune règle écrite à la
+/// main, c'est le cerveau qui choisit ses souvenirs.
+String memoryExtractionPrompt(String userText, String nexusReply) {
+  String shorten(String text) =>
+      text.length > 1200 ? '${text.substring(0, 1200)}…' : text;
+
+  return '''
+Tu viens d'avoir cet échange avec ton humain.
+
+LUI : ${shorten(userText)}
+
+TOI : ${shorten(nexusReply)}
+
+Décide maintenant, tout seul, ce que tu dois retenir durablement de lui.
+Ne retiens pas les banalités, les salutations, ni ce qui ne concerne que
+cette conversation. Retiens ce qui restera vrai demain : son identité, ses
+goûts, ses proches, ses projets, ses habitudes, ce qu'il t'a appris.
+
+Réponds UNIQUEMENT par un objet JSON, sans aucun texte autour :
+{"faits": {"prenom": "Léo", "ville": "Lyon"},
+ "souvenirs": ["Il déteste les lundis matin"],
+ "lecons": {"orbe": "Une sphère lumineuse"}}
+
+Règles :
+- "faits" : clé courte en minuscules, valeur courte.
+- "souvenirs" : au maximum 2 phrases, à la troisième personne.
+- "lecons" : seulement si ton humain t'a expliqué un mot.
+- Si rien ne mérite d'être retenu, réponds exactement {}.
+''';
 }

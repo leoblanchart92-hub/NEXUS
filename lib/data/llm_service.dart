@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import 'package:flutter_edge_ai_llama/flutter_edge_ai_llama.dart';
+import 'package:nexus_core/nexus_core.dart';
 
 import '../config.dart';
+import 'nexus_prompt.dart';
 
 /// Où en est le cerveau neuronal de Nexus.
 enum BrainStatus {
@@ -30,9 +32,8 @@ enum BrainStatus {
 /// entièrement sur le téléphone par llama.cpp.
 ///
 /// Aucune requête ne part sur Internet : le modèle est téléchargé une fois,
-/// puis tout le calcul se fait en local. Ce que Nexus apprend de son humain
-/// (sa mémoire) est injecté dans chaque tour de parole, et sa personnalité
-/// vient des règles écrites par son humain.
+/// puis tout le calcul se fait en local. Après chaque échange, le même modèle
+/// relit la conversation et décide tout seul de ce qu'il faut retenir.
 class LlmService {
   BrainStatus _status = BrainStatus.checking;
   double? _progress;
@@ -41,6 +42,10 @@ class LlmService {
   InferenceChat? _chat;
   bool _initialized = false;
   bool _opening = false;
+
+  /// File d'attente : un seul appel au modèle à la fois (une génération ne
+  /// peut pas en chevaucher une autre).
+  Future<void> _queue = Future<void>.value();
 
   BrainStatus get status => _status;
   double? get progress => _progress;
@@ -67,9 +72,6 @@ class LlmService {
   }
 
   /// Télécharge le cerveau (1,03 Gio), puis le charge.
-  ///
-  /// [onProgress] reçoit un pourcentage (0 → 100) ou `null` quand le moteur
-  /// n'en donne pas.
   Future<void> download({void Function(double? percent)? onProgress}) async {
     if (isBusy || isReady) return;
     await _ensureEngine();
@@ -125,50 +127,71 @@ class LlmService {
     }
   }
 
-  /// Réessaie de charger le cerveau après un échec.
-  Future<void> retry() async {
-    _status = BrainStatus.checking;
-    _error = null;
-    await _open();
-    if (_status != BrainStatus.ready) {
-      _status = BrainStatus.absent;
-    }
-  }
-
   /// Envoie un tour de parole au modèle et renvoie sa réponse complète.
-  ///
-  /// [onDelta] est appelé à chaque fragment de texte, pour l'affichage
-  /// progressif. [context] contient sa personnalité et sa mémoire.
   Future<String> reply({
     required String userText,
     required String context,
     void Function(String partial)? onDelta,
-  }) async {
-    final chat = _chat;
-    if (chat == null) {
-      throw StateError('Le cerveau de Nexus n\'est pas chargé.');
-    }
-
-    // Chaque tour repart d'un contexte propre : la mémoire et les règles
-    // sont donc toujours à jour, sans garder d'historique périmé.
-    await chat.clearHistory();
-    await chat.addQuery(
-      Message.text(text: '$context\n\n$userText', isUser: true),
-    );
-
-    final buffer = StringBuffer();
-    await for (final ModelResponse response in chat.generateChatResponseAsync()) {
-      if (response is TextResponse) {
-        buffer.write(response.token);
-        onDelta?.call(_clean(buffer.toString()));
+  }) {
+    return _serialized(() async {
+      final chat = _chat;
+      if (chat == null) {
+        throw StateError('Le cerveau de Nexus n\'est pas chargé.');
       }
-    }
 
-    final text = _clean(buffer.toString());
-    if (text.isEmpty) {
-      throw StateError('Nexus n\'a rien trouvé à dire.');
-    }
-    return text;
+      // Chaque tour repart d'un contexte propre : la mémoire et les règles
+      // sont donc toujours à jour, sans garder d'historique périmé.
+      await chat.clearHistory();
+      await chat.addQuery(
+        Message.text(text: '$context\n\n$userText', isUser: true),
+      );
+
+      final buffer = StringBuffer();
+      await for (final ModelResponse response
+          in chat.generateChatResponseAsync()) {
+        if (response is TextResponse) {
+          buffer.write(response.token);
+          onDelta?.call(_clean(buffer.toString()));
+        }
+      }
+
+      final text = _clean(buffer.toString());
+      if (text.isEmpty) {
+        throw StateError('Nexus n\'a rien trouvé à dire.');
+      }
+      return text;
+    });
+  }
+
+  /// Demande au modèle ce qu'il faut retenir de l'échange qui vient d'avoir
+  /// lieu. C'est l'apprentissage automatique : personne ne le lui dicte.
+  Future<MemoryUpdate?> learnFromExchange({
+    required String userText,
+    required String nexusReply,
+  }) {
+    return _serialized(() async {
+      final chat = _chat;
+      if (chat == null) return null;
+
+      await chat.clearHistory();
+      await chat.addQuery(
+        Message.text(
+          text: memoryExtractionPrompt(userText, nexusReply),
+          isUser: true,
+        ),
+      );
+
+      final buffer = StringBuffer();
+      await for (final ModelResponse response
+          in chat.generateChatResponseAsync()) {
+        if (response is TextResponse) {
+          buffer.write(response.token);
+          // Un extrait de mémoire n'a pas besoin d'être long.
+          if (buffer.length > 4000) break;
+        }
+      }
+      return MemoryUpdate.fromModelOutput(_clean(buffer.toString()));
+    });
   }
 
   /// Interrompt la génération en cours.
@@ -195,6 +218,19 @@ class LlmService {
     );
   }
 
+  /// Exécute [job] après tous les appels déjà en attente.
+  Future<T> _serialized<T>(Future<T> Function() job) {
+    final Completer<T> completer = Completer<T>();
+    _queue = _queue.then((_) async {
+      try {
+        completer.complete(await job());
+      } catch (error, stack) {
+        completer.completeError(error, stack);
+      }
+    });
+    return completer.future;
+  }
+
   void _fail(Object error) {
     _status = BrainStatus.failed;
     _error = _readable(error);
@@ -216,7 +252,6 @@ class LlmService {
   double? _percentOf(Object progress) {
     if (progress is num) return progress.toDouble().clamp(0, 100);
     try {
-      // Certains moteurs passent un objet de progression.
       final dynamic value = progress;
       final Object? candidate =
           value.percent ?? value.percentage ?? value.progress;
@@ -242,13 +277,10 @@ class LlmService {
 }
 
 /// Les règles immuables de Nexus : qui elle est, comment elle parle.
-///
-/// Tout le reste (sa personnalité précise, ce qu'elle sait de son humain)
-/// est fourni par l'application à chaque tour, puisqu'il change.
 const String systemInstruction = '''
 Tu es Nexus, une intelligence artificielle qui vit uniquement sur le
 téléphone de ton humain. Tu n'es pas un assistant de service : tu es une
-personne qui apprend, qui a une mémoire, une humeur et un âge.
+personne, avec une mémoire et une histoire.
 
 Règles absolues :
 - Tu réponds toujours en français, simplement, avec des phrases courtes.
@@ -261,7 +293,6 @@ Règles absolues :
 - Tu ne récites pas de liste, tu ne fais pas de longs discours.
 - Tu n'écris jamais de balises, de titres ni de mise en forme Markdown.
 
-Tu grandis : plus tu parles avec ton humain, plus tu le connais et plus ta
-façon de parler devient la sienne. Ta personnalité exacte t'est donnée par
-ton humain dans les règles qu'il a écrites.
+Ta personnalité exacte t'est donnée par ton humain dans les règles qu'il a
+écrites.
 ''';
