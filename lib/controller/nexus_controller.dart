@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:nexus_core/nexus_core.dart';
@@ -57,6 +58,11 @@ class NexusController extends ChangeNotifier {
   bool _checkingUpdate = false;
   String _partial = '';
   UpdateCheck? _lastUpdateCheck;
+  File? _updateApk;
+  bool _downloadingUpdate = false;
+  double _updateProgress = 0;
+  bool _installAllowed = true;
+  String? _updateError;
   final List<ChatMessage> _messages = <ChatMessage>[];
 
   bool get isLoading => _loading;
@@ -71,6 +77,17 @@ class NexusController extends ChangeNotifier {
   int get memoryCount => _state?.memory.size ?? 0;
   bool get isCheckingUpdate => _checkingUpdate;
   UpdateCheck? get lastUpdateCheck => _lastUpdateCheck;
+
+  /// Une version plus récente, signée, a été trouvée.
+  bool get updateAvailable => _lastUpdateCheck?.hasUpdate ?? false;
+  bool get downloadingUpdate => _downloadingUpdate;
+  double get updateProgress => _updateProgress;
+  String? get updateError => _updateError;
+  bool get installAllowed => _installAllowed;
+
+  /// L'APK est téléchargé et vérifié, il n'attend plus que l'installation.
+  bool get updateReadyToInstall => _updateApk != null;
+
   List<ChatMessage> get messages => List<ChatMessage>.unmodifiable(_messages);
 
   /// Le texte du cerveau neuronal en train de s'écrire.
@@ -122,6 +139,11 @@ class NexusController extends ChangeNotifier {
     // Le chargement des poids prend quelques secondes : il ne doit pas
     // bloquer l'affichage.
     unawaited(_prepareBrain());
+
+    // Elle regarde toute seule si une version plus récente existe.
+    if (updates.isUnlocked) {
+      unawaited(checkForUpdates());
+    }
   }
 
   Future<void> _prepareBrain() async {
@@ -333,6 +355,68 @@ class NexusController extends ChangeNotifier {
   /// Ouvre la page des releases, quand le manifeste est absent.
   Future<bool> openReleases() => updates.openReleases();
 
+  /// Télécharge la nouvelle version, contrôle son empreinte, puis demande à
+  /// Android de l'installer — tout depuis Nexus.
+  Future<void> downloadAndInstallUpdate() async {
+    final UpdateManifest? manifest = _lastUpdateCheck?.manifest;
+    if (manifest == null || !updateAvailable || _downloadingUpdate) return;
+
+    _downloadingUpdate = true;
+    _updateError = null;
+    _updateApk = null;
+    _updateProgress = 0;
+    _notify();
+
+    try {
+      final File apk = await updates.downloadApk(
+        manifest,
+        onProgress: (double value) {
+          _updateProgress = value;
+          _notify();
+        },
+      );
+      _updateApk = apk;
+      _downloadingUpdate = false;
+      _updateProgress = 1;
+      _notify();
+      await installPendingUpdate();
+    } on UpdateException catch (error) {
+      _downloadingUpdate = false;
+      _updateError = error.message;
+      _notify();
+    } catch (error) {
+      _downloadingUpdate = false;
+      _updateError = 'Mise à jour impossible : $error';
+      _notify();
+    }
+  }
+
+  /// Confie l'APK vérifié au programme d'installation d'Android.
+  Future<void> installPendingUpdate() async {
+    final File? apk = _updateApk;
+    if (apk == null) return;
+
+    _installAllowed = await updates.canInstallPackages();
+    if (!_installAllowed) {
+      _updateError = 'Autorise Nexus à installer des applications, puis '
+          'reviens ici pour terminer la mise à jour.';
+      _notify();
+      return;
+    }
+
+    final bool opened = await updates.installApk(apk);
+    _updateError =
+        opened ? null : "Android n'a pas pu ouvrir le programme d'installation.";
+    _notify();
+  }
+
+  /// Ouvre l'écran système d'autorisation, puis relit l'état accordé.
+  Future<void> grantInstallPermission() async {
+    await updates.requestInstallPermission();
+    _installAllowed = await updates.canInstallPackages();
+    _notify();
+  }
+
   /// Efface tout et la fait renaître (le cerveau reste installé).
   Future<void> reset() async {
     await _store.wipe();
@@ -340,6 +424,8 @@ class NexusController extends ChangeNotifier {
     _messages.clear();
     _partial = '';
     _lastUpdateCheck = null;
+    _updateApk = null;
+    _updateError = null;
     _notify();
   }
 }
