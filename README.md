@@ -4,13 +4,17 @@ Une IA qui vit sur ton téléphone. Pas un chatbot dans le nuage : un **vrai
 réseau de neurones** exécuté localement, une **mémoire vierge au départ** qui
 se remplit toute seule, et des **règles que tu écris toi-même**.
 
-Version 0.6.0 — Android 9 (API 28) minimum, téléphone arm64.
+Version 0.7.0 — Android 9 (API 28) minimum, téléphone arm64.
 
 ## Ce qu'elle est
 
-- **Un cerveau neuronal** : Qwen3-1.7B (Q4_K_M, 1,03 Go), exécuté par
-  llama.cpp directement sur l'appareil. Elle comprend le français, raisonne
-  et répond à des questions qu'on ne lui a jamais posées.
+- **Un cerveau neuronal** : Qwen3, exécuté par llama.cpp directement sur
+  l'appareil. Elle comprend le français, raisonne et répond à des questions
+  qu'on ne lui a jamais posées.
+- **Quatre cerveaux au choix, tous locaux** : de Qwen3 0.6B (378 Mo, très
+  rapide) à Qwen3 4B Instruct 2507 (2,33 Go, le plus juste). Tu en installes
+  autant que tu veux, un seul est allumé à la fois, et changer ne coûte rien
+  une fois le fichier téléchargé.
 - **Elle apprend toute seule** : après chaque échange, le modèle relit la
   conversation et décide lui-même ce qu'il retient — un prénom, un goût, un
   souvenir, un mot expliqué. Rien n'est dicté à la main, il n'y a plus ni
@@ -27,10 +31,28 @@ Version 0.6.0 — Android 9 (API 28) minimum, téléphone arm64.
   téléchargement initial du modèle.
 - **Une personnalité que tu diriges** : onglet « Cerveau » → « Ses règles ».
 
+## Plusieurs cerveaux
+
+L'onglet **Cerveau** liste les modèles installables et montre pour chacun son
+état : *Allumé*, *Installé*, ou à télécharger avec sa taille.
+
+| Cerveau | Taille | Pour qui |
+| --- | --- | --- |
+| Qwen3 0.6B | 378 Mo | Téléphones modestes, réponses courtes et rapides |
+| Qwen3 1.7B | 1,03 Go | Le bon équilibre, recommandé |
+| Qwen3 4B | 2,33 Go | Plus posé, demande de la mémoire vive |
+| Qwen3 4B Instruct 2507 | 2,33 Go | Le plus juste à l'écrit, le plus lent |
+
+Un seul cerveau est chargé en mémoire à la fois — deux modèles ne tiendraient
+pas dans la mémoire vive d'un téléphone. Les fichiers restent sur l'appareil :
+« Allumer ce cerveau » recharge simplement celui que tu choisis, sans
+retéléchargement. Sa mémoire à elle (ce qu'elle sait de toi) ne dépend pas du
+cerveau : tu peux en changer sans rien perdre.
+
 ## Ce qu'elle n'est pas
 
-- Elle **n'est pas** au niveau de ChatGPT ou Claude : 1,7 milliard de
-  paramètres tient dans un téléphone, contre des centaines de milliards pour
+- Elle **n'est pas** au niveau de ChatGPT ou Claude : quelques milliards de
+  paramètres tiennent dans un téléphone, contre des centaines de milliards pour
   les modèles de laboratoire.
 - Elle **ne réentraîne pas ses poids** en te parlant. Aucun modèle au monde ne
   le fait sur un téléphone : les poids sont gelés, même chez OpenAI. Ce qui
@@ -43,15 +65,16 @@ Version 0.6.0 — Android 9 (API 28) minimum, téléphone arm64.
 2. Installe-le (autorise l'installation depuis cette source).
 3. Au premier lancement, tu la mets au monde : elle s'appelle Nexus et elle
    naît vide.
-4. Onglet **Cerveau** → « Télécharger son cerveau (1,03 Go) », en Wi-Fi.
-   Ensuite, elle fonctionne sans aucune connexion.
+4. Onglet **Cerveau** → choisis un cerveau et télécharge-le (Wi-Fi
+   conseillé). Le 1.7B est le bon point de départ. Ensuite, elle fonctionne
+   sans aucune connexion.
 
 ## Les trois onglets
 
 - **Parler** : la conversation. La réponse s'écrit en direct.
 - **Mémoire** : ce qu'elle a retenu d'elle-même (faits, souvenirs, leçons).
-- **Cerveau** : installer le modèle, écrire ses règles, faire les mises à
-  jour, vérifier que tout reste chez toi.
+- **Cerveau** : choisir et allumer un cerveau, écrire ses règles, faire les
+  mises à jour, vérifier que tout reste chez toi.
 
 ## Mises à jour depuis l'application
 
@@ -66,18 +89,14 @@ inconnues ») : la carte propose le bouton qui ouvre directement le bon écran.
 Si l'installation automatique échoue, le bouton « Ouvrir la page de
 téléchargement » reste disponible en secours.
 
-Une seule exception, une seule fois : les versions publiées avant la 0.6.0 ont
-chacune été signées avec une clé différente (la clé debug, régénérée à chaque
-build), donc Android les voit comme une autre application et répond « paquet en
-conflit avec un package déjà présent ». Désinstalle cette ancienne version une
-fois, installe la 0.6.0 : ensuite chaque build est signé avec la même clé, celle
-du dépôt, et les mises à jour s'installent par-dessus sans rien perdre.
+Depuis la 0.6.0, chaque build est signé avec la même clé : les mises à jour
+s'installent par-dessus la version en place.
 
 ## Vie privée
 
 Le modèle, la mémoire et les conversations restent dans le stockage privé de
 l'application. Aucune donnée n'est envoyée à un serveur. Le seul accès réseau
-est le téléchargement initial du modèle et la vérification des mises à jour.
+est le téléchargement des cerveaux et la vérification des mises à jour.
 
 ## Mises à jour signées
 
@@ -111,5 +130,6 @@ flutter build apk --release
 - Réponses lentes sur les téléphones modestes : c'est un vrai modèle.
 - L'apprentissage ajoute une seconde génération courte après chaque réponse :
   la mémoire s'écrit quelques secondes après que la réponse s'affiche.
-- Elle est libre dans ses mots, mais pas hors de son téléphone : elle ne peut
-  pas consulter Internet ni connaître l'actualité.
+- Les modèles 4B demandent beaucoup de mémoire vive : sur un téléphone
+  modeste, le chargement peut échouer. L'application le dit et propose de
+  revenir à un cerveau plus léger.
