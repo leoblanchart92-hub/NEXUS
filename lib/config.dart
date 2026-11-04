@@ -5,7 +5,7 @@
 /// GitHub Actions.
 class AppConfig {
   /// Version affichée par Nexus, synchronisée avec `pubspec.yaml`.
-  static const String version = '0.5.2';
+  static const String version = '0.6.0';
 
   static const String owner = 'leoblanchart92-hub';
   static const String repository = 'NEXUS';
