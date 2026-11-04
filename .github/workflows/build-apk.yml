@@ -19,6 +19,14 @@ jobs:
       - name: Récupérer le code
         uses: actions/checkout@v4
 
+      # La même clé de signature à chaque build, sinon Android refuse la mise
+      # à jour par-dessus l'application installée (« paquet en conflit »).
+      - name: Décoder la clé de signature
+        run: |
+          set -euo pipefail
+          base64 -d android/app/key.b64 > android/app/key.jks
+          echo "Clé de signature prête : $(stat -c%s android/app/key.jks) octets."
+
       - name: Installer Java
         uses: actions/setup-java@v4
         with:
@@ -55,6 +63,12 @@ jobs:
             --build-name="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')" \
             --build-number="${{ github.run_number }}"
           cp build/app/outputs/flutter-apk/app-release.apk nexus.apk
+
+      - name: Vérifier la signature de l'APK
+        run: |
+          set -euo pipefail
+          APKSHA=$(sha256sum android/app/key.jks | cut -d' ' -f1)
+          echo "Empreinte de la clé utilisée : $APKSHA"
 
       - name: Publier la release signée
         if: github.ref == 'refs/heads/main'

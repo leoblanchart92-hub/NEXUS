@@ -30,11 +30,28 @@ android {
         }
     }
 
+    // Clé de signature stable, versionnée dans le dépôt (base64) et décodée
+    // par la CI. C'est elle qui permet à Android d'installer une mise à jour
+    // par-dessus la version en place : avec la clé debug d'avant, régénérée à
+    // chaque build, Android répondait « paquet en conflit ».
+    signingConfigs {
+        create("release") {
+            storeFile = file("key.jks")
+            storePassword = "nexus-release"
+            keyAlias = "nexus"
+            keyPassword = "nexus-release"
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Sans clé locale (clone neuf), on retombe sur la clé debug pour
+            // que `flutter build apk` fonctionne quand même.
+            signingConfig = if (file("key.jks").exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
