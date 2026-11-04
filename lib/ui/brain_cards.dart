@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../config.dart';
 import '../controller/nexus_controller.dart';
+import '../data/brain_catalogue.dart';
 import '../data/llm_service.dart';
 import '../theme.dart';
 
-/// Bandeau discret affiché au-dessus de la conversation tant que le cerveau
-/// neuronal n'est pas chargé.
+/// Bandeau discret affiché au-dessus de la conversation tant qu'aucun cerveau
+/// n'est chargé.
 class BrainBanner extends StatelessWidget {
   const BrainBanner({super.key, required this.controller});
 
@@ -41,7 +41,7 @@ class BrainBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  _label(status, percent),
+                  _label(status, percent, controller),
                   style: const TextStyle(
                     fontSize: 12.5,
                     color: NexusColors.muted,
@@ -66,10 +66,9 @@ class BrainBanner extends StatelessWidget {
             ),
           ),
           if (!busy &&
-              (status == BrainStatus.absent ||
-                  status == BrainStatus.failed))
+              (status == BrainStatus.absent || status == BrainStatus.failed))
             TextButton(
-              onPressed: controller.downloadBrain,
+              onPressed: () => controller.useBrain(controller.activeBrain),
               child:
                   Text(status == BrainStatus.failed ? 'Réessayer' : 'Installer'),
             ),
@@ -78,28 +77,33 @@ class BrainBanner extends StatelessWidget {
     );
   }
 
-  static String _label(BrainStatus status, double? percent) {
+  static String _label(
+    BrainStatus status,
+    double? percent,
+    NexusController controller,
+  ) {
+    final brain = controller.activeBrain;
     switch (status) {
       case BrainStatus.checking:
-        return 'Je regarde si mon cerveau est déjà là…';
+        return 'Je regarde quels cerveaux sont déjà là…';
       case BrainStatus.absent:
-        return "Mon cerveau neuronal n'est pas encore installé : je babille "
-            'pour le moment. 1,03 Go, une seule fois.';
+        return "Aucun cerveau installé : je babille pour le moment. Choisis-en "
+            'un dans l\'onglet Cerveau, une seule fois.';
       case BrainStatus.downloading:
         return percent == null
-            ? 'Téléchargement de mon cerveau…'
-            : 'Téléchargement de mon cerveau : ${percent.round()} %';
+            ? 'Téléchargement de ${brain.label}…'
+            : 'Téléchargement de ${brain.label} : ${percent.round()} %';
       case BrainStatus.loading:
-        return 'Je charge mon cerveau en mémoire…';
+        return 'Je charge ${brain.label} en mémoire…';
       case BrainStatus.ready:
-        return 'Cerveau neuronal actif.';
+        return 'Cerveau actif : ${brain.label}.';
       case BrainStatus.failed:
-        return 'Mon cerveau n\'a pas pu être chargé.';
+        return '${brain.label} n\'a pas pu être chargé.';
     }
   }
 }
 
-/// La carte du cerveau : installation, état, et ce qu'elle implique.
+/// Les cerveaux disponibles : tous locaux, un seul allumé à la fois.
 class BrainCard extends StatelessWidget {
   const BrainCard({super.key, required this.controller});
 
@@ -107,20 +111,16 @@ class BrainCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = controller.brainStatus;
-    final percent = controller.brainProgress;
-    final busy = controller.brainBusy;
-
     return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const _PanelTitle('Son vrai cerveau'),
-          const SizedBox(height: 12),
+          const _PanelTitle('Ses cerveaux'),
+          const SizedBox(height: 10),
           const Text(
-            'Un réseau de neurones de 1,7 milliard de paramètres (Qwen3-1.7B) '
-            'tourne directement sur ton téléphone. Aucune requête ne part sur '
-            'Internet : tout le calcul se fait ici.',
+            'Plusieurs réseaux de neurones, tous exécutés sur ton téléphone '
+            'par llama.cpp. Un seul est allumé à la fois, et aucun n\'a besoin '
+            'd\'Internet pour te répondre.',
             style: TextStyle(
               color: NexusColors.muted,
               fontSize: 13,
@@ -128,74 +128,153 @@ class BrainCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          if (status == BrainStatus.ready)
-            const Row(
-              children: <Widget>[
-                Icon(Icons.check_circle, size: 16, color: NexusColors.mint),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Cerveau chargé et actif, hors ligne.',
-                    style: TextStyle(color: NexusColors.mint, fontSize: 13),
+          for (final BrainVariant brain in controller.brains) ...<Widget>[
+            _BrainRow(controller: controller, brain: brain),
+            const SizedBox(height: 10),
+          ],
+          const Text(
+            'Changer de cerveau ne coûte rien une fois téléchargé : le fichier '
+            'reste sur le téléphone et se rallume instantanément.',
+            style: TextStyle(color: NexusColors.muted, fontSize: 11.5),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BrainRow extends StatelessWidget {
+  const _BrainRow({required this.controller, required this.brain});
+
+  final NexusController controller;
+  final BrainVariant brain;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool active = controller.activeBrain.id == brain.id &&
+        controller.brainStatus == BrainStatus.ready;
+    final bool installed = controller.isBrainInstalled(brain);
+    final bool busy =
+        controller.brainBusy && controller.activeBrain.id == brain.id;
+    final bool locked = controller.brainBusy && !busy;
+    final double? percent = controller.brainProgress;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: NexusColors.surfaceHigh,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: active
+              ? NexusColors.mint.withValues(alpha: 0.55)
+              : Colors.transparent,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  brain.label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: NexusColors.text,
                   ),
                 ),
-              ],
-            )
-          else if (busy) ...<Widget>[
-            Text(
-              status == BrainStatus.downloading
-                  ? 'Téléchargement : '
-                      '${percent == null ? '…' : '${percent.round()} %'}  '
-                      '(${(AppConfig.brainBytes / 1073741824).toStringAsFixed(2)} Go)'
-                  : 'Chargement des poids en mémoire…',
-              style: const TextStyle(color: NexusColors.muted, fontSize: 12.5),
+              ),
+              if (active)
+                const _Chip(
+                  text: 'Allumé',
+                  color: NexusColors.mint,
+                  icon: Icons.bolt_rounded,
+                )
+              else if (installed)
+                const _Chip(
+                  text: 'Installé',
+                  color: NexusColors.muted,
+                  icon: Icons.check_circle_outline_rounded,
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            brain.tagline,
+            style: const TextStyle(
+              color: NexusColors.muted,
+              fontSize: 12.5,
+              height: 1.4,
             ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            brain.sizeLabel,
+            style: const TextStyle(color: NexusColors.muted, fontSize: 11.5),
+          ),
+          if (busy) ...<Widget>[
             const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
                 value: percent == null ? null : percent / 100,
-                minHeight: 8,
+                minHeight: 7,
                 backgroundColor: NexusColors.surface,
                 valueColor: const AlwaysStoppedAnimation<Color>(
                   NexusColors.violet,
                 ),
               ),
             ),
-          ] else ...<Widget>[
-            if (status == BrainStatus.failed)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  controller.brainError ?? 'Échec du chargement.',
-                  style: const TextStyle(
-                    color: NexusColors.rose,
-                    fontSize: 12.5,
-                    height: 1.4,
-                  ),
-                ),
-              ),
+            const SizedBox(height: 6),
+            Text(
+              controller.brainStatus == BrainStatus.downloading
+                  ? 'Téléchargement : '
+                      '${percent == null ? '…' : '${percent.round()} %'}'
+                  : 'Chargement des poids en mémoire…',
+              style: const TextStyle(color: NexusColors.muted, fontSize: 11.5),
+            ),
+          ],
+          if (!active) ...<Widget>[
+            const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: controller.downloadBrain,
-                icon: const Icon(Icons.download_rounded, size: 18),
-                label: Text(
-                  status == BrainStatus.failed
-                      ? 'Réessayer'
-                      : 'Télécharger son cerveau (1,03 Go)',
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'À faire une seule fois, en Wi-Fi. Ensuite, elle fonctionne sans '
-              'aucune connexion.',
-              style: TextStyle(color: NexusColors.muted, fontSize: 11.5),
+              child: installed
+                  ? OutlinedButton.icon(
+                      onPressed:
+                          locked ? null : () => controller.useBrain(brain),
+                      icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                      label: const Text('Allumer ce cerveau'),
+                    )
+                  : FilledButton.icon(
+                      onPressed:
+                          locked ? null : () => controller.useBrain(brain),
+                      icon: const Icon(Icons.download_rounded, size: 18),
+                      label: Text('Télécharger (${brain.sizeLabel})'),
+                    ),
             ),
           ],
         ],
       ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({required this.text, required this.color, required this.icon});
+
+  final String text;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Text(text, style: TextStyle(color: color, fontSize: 11.5)),
+      ],
     );
   }
 }
