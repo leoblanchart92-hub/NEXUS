@@ -88,9 +88,12 @@ de l'installer. Sans clé, les mises à jour sont verrouillées.
 
 La clé de signature Android est stable : elle est versionnée dans le dépôt
 (`android/app/key.b64`, décodée en `key.jks` par la CI) et sert à toutes les
-releases. C'est ce qui rend l'installation par-dessus possible. Son empreinte
+releases. C'est ce qui rend l'installation par-dessus possible. Son certificat
 SHA-256 :
-`D9:A0:4B:E3:D1:2E:65:95:95:40:4F:82:40:23:BC:60:26:41:74:47:61:35:A7:47:08:71:E3:46:F0:A0:5A:5C`.
+`B0:47:00:04:F1:68:DF:A9:92:5A:60:FA:79:83:2E:F3:0F:3A:61:FA:32:FB:20:C5:44:87:63:00:3F:0A:06:B0`.
+La CI compare cette empreinte à celle de chaque APK avant de publier : la ligne
+`Signature conforme` dans le journal du build est la preuve que la mise à jour
+s'installera par-dessus la version en place.
 
 ## Construire soi-même
 
