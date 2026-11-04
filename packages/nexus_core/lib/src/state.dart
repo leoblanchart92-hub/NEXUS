@@ -15,6 +15,7 @@ class NexusState {
     this.exchanges = 0,
     this.affection = 0.5,
     this.assurance = 0.15,
+    this.voiceEnabled = false,
     Lexicon? lexicon,
     Memory? memory,
     Needs? needs,
@@ -31,6 +32,10 @@ class NexusState {
   int exchanges;
   double affection;
   double assurance;
+
+  /// Si vrai, Nexus prononce ses réponses à voix haute.
+  bool voiceEnabled;
+
   final Lexicon lexicon;
   final Memory memory;
   final Needs needs;
@@ -67,6 +72,7 @@ class NexusState {
         'exchanges': exchanges,
         'affection': affection,
         'assurance': assurance,
+        'voiceEnabled': voiceEnabled,
         'lexicon': lexicon.toJson(),
         'memory': memory.toJson(),
         'needs': needs.toJson(),
@@ -85,6 +91,7 @@ class NexusState {
       exchanges: (json['exchanges'] as num?)?.toInt() ?? 0,
       affection: (json['affection'] as num?)?.toDouble() ?? 0.5,
       assurance: (json['assurance'] as num?)?.toDouble() ?? 0.15,
+      voiceEnabled: (json['voiceEnabled'] as bool?) ?? false,
       lexicon: rawLexicon is Map
           ? Lexicon.fromJson(Map<String, dynamic>.from(rawLexicon))
           : null,

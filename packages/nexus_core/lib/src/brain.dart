@@ -15,6 +15,19 @@ class LearnedFact {
   final String value;
 }
 
+/// Ce qu'il répond après avoir appris une leçon.
+class LessonResult {
+  const LessonResult({
+    required this.reply,
+    required this.xpGained,
+    required this.stageUp,
+  });
+
+  final String reply;
+  final int xpGained;
+  final bool stageUp;
+}
+
 /// Une réponse de Nexus, avec de quoi raconter sa croissance à l'écran.
 class NexusReply {
   const NexusReply({
@@ -163,6 +176,32 @@ class NexusBrain {
     );
   }
 
+  /// Expérience gagnée pour chaque leçon apprise.
+  static const int xpPerLesson = 12;
+
+  /// Lui apprend un mot et sa définition, ensemble, comme à l'école.
+  LessonResult teach(String word, String definition, {DateTime? now}) {
+    final moment = now ?? DateTime.now();
+    final stageBefore = state.stage;
+
+    final cleanWord = word.trim();
+    final cleanDefinition = definition.trim();
+
+    state.memory.learnLesson(cleanWord, cleanDefinition, moment);
+    state.lexicon.learn(tokenize('$cleanWord $cleanDefinition'));
+    state.xp += xpPerLesson;
+    state.exchanges += 1;
+    state.needs.tick(moment);
+    state.needs.afterExchange();
+    state.lastSeen = moment;
+
+    return LessonResult(
+      reply: _acknowledgeLesson(cleanWord, cleanDefinition),
+      xpGained: xpPerLesson,
+      stageUp: state.stage != stageBefore,
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Apprentissage
   // ---------------------------------------------------------------------------
@@ -251,6 +290,9 @@ class NexusBrain {
       if (episode != null) return _recite(episode);
     }
 
+    final fromLesson = _answerFromLessons(tokens);
+    if (fromLesson != null) return fromLesson;
+
     if (tokens.isEmpty) return babble();
 
     if (state.stage == Stage.nouveauNe) {
@@ -281,6 +323,62 @@ class NexusBrain {
       Stage.nourrisson => '${state.name.toLowerCase()} !',
       Stage.petitParleur => 'moi ${state.name.toLowerCase()}',
       _ => "Je m'appelle ${state.name}.",
+    };
+  }
+
+  /// Répond à partir des leçons apprises, ou récite une leçon au hasard.
+  String? _answerFromLessons(List<String> tokens) {
+    final lessons = state.memory.lessonList;
+    if (lessons.isEmpty) return null;
+
+    final asksRecital = tokens.contains('recite') ||
+        tokens.contains('lecon') ||
+        tokens.contains('leçon') ||
+        tokens.contains('revision') ||
+        tokens.contains('révision');
+    if (asksRecital) {
+      return _reciteLesson(lessons[_random.nextInt(lessons.length)]);
+    }
+
+    final asksWhat = tokens.contains('quoi') ||
+        tokens.contains('connais') ||
+        tokens.contains('definition') ||
+        tokens.contains('définition') ||
+        tokens.contains('definis');
+    if (!asksWhat) return null;
+
+    final candidate = _lastContentWord(tokens);
+    if (candidate == null) return null;
+
+    final lesson = state.memory.lessonFor(candidate);
+    if (lesson == null) return null;
+    return _reciteLesson(lesson);
+  }
+
+  String? _lastContentWord(List<String> tokens) {
+    for (var i = tokens.length - 1; i >= 0; i--) {
+      if (!_stopwords.contains(tokens[i])) return tokens[i];
+    }
+    return null;
+  }
+
+  String _reciteLesson(Lesson lesson) {
+    return switch (state.stage) {
+      Stage.nouveauNe => babble(),
+      Stage.nourrisson => '${lesson.word} ?',
+      Stage.petitParleur => '${lesson.word} ... ${lesson.definition}',
+      _ => '${_capitalize(lesson.word)} : ${lesson.definition}',
+    };
+  }
+
+  String _acknowledgeLesson(String word, String definition) {
+    return switch (state.stage) {
+      Stage.nouveauNe => babble(),
+      Stage.nourrisson => '$word ?',
+      Stage.petitParleur => '$word ... $word ...',
+      Stage.enfant => '« $word », $definition. Je le sais maintenant.',
+      Stage.adolescent || Stage.adulte =>
+        "J'ai appris « $word ». $definition",
     };
   }
 
