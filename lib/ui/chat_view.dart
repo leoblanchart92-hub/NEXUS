@@ -3,6 +3,7 @@ import 'package:nexus_core/nexus_core.dart';
 
 import '../controller/nexus_controller.dart';
 import '../theme.dart';
+import 'brain_cards.dart';
 import 'widgets/message_bubble.dart';
 
 /// L'onglet de conversation.
@@ -61,13 +62,16 @@ class _ChatViewState extends State<ChatView> {
 
     return Column(
       children: <Widget>[
+        BrainBanner(controller: widget.controller),
         Expanded(
           child: ListView.builder(
             controller: _scroll,
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             itemCount: messages.length + (thinking ? 1 : 0),
             itemBuilder: (BuildContext context, int index) {
-              if (index >= messages.length) return const _ThinkingBubble();
+              if (index >= messages.length) {
+                return _ThinkingBubble(text: widget.controller.partial);
+              }
               return MessageBubble(message: messages[index]);
             },
           ),
@@ -116,10 +120,14 @@ class _ChatViewState extends State<ChatView> {
 }
 
 class _ThinkingBubble extends StatelessWidget {
-  const _ThinkingBubble();
+  const _ThinkingBubble({required this.text});
+
+  final String text;
 
   @override
   Widget build(BuildContext context) {
+    final writing = text.trim().isNotEmpty;
+
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -129,11 +137,20 @@ class _ThinkingBubble extends StatelessWidget {
           color: NexusColors.surfaceHigh,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: const SizedBox(
-          width: 34,
-          height: 12,
-          child: _Dots(),
-        ),
+        child: writing
+            ? Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 15,
+                  height: 1.45,
+                  color: NexusColors.text,
+                ),
+              )
+            : const SizedBox(
+                width: 34,
+                height: 12,
+                child: _Dots(),
+              ),
       ),
     );
   }

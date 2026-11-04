@@ -3,6 +3,7 @@ import 'package:nexus_core/nexus_core.dart';
 
 import '../controller/nexus_controller.dart';
 import '../theme.dart';
+import 'brain_view.dart';
 import 'chat_view.dart';
 import 'growth_view.dart';
 import 'widgets/nexus_orb.dart';
@@ -45,6 +46,7 @@ class _NexusScreenState extends State<NexusScreen> {
                   children: <Widget>[
                     ChatView(controller: widget.controller),
                     GrowthView(controller: widget.controller),
+                    BrainView(controller: widget.controller),
                   ],
                 ),
               ),
@@ -65,6 +67,11 @@ class _NexusScreenState extends State<NexusScreen> {
             icon: Icon(Icons.auto_graph_outlined),
             selectedIcon: Icon(Icons.auto_graph),
             label: 'Grandir',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.psychology_outlined),
+            selectedIcon: Icon(Icons.psychology),
+            label: 'Cerveau',
           ),
         ],
       ),
