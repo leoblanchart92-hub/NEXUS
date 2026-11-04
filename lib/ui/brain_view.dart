@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../controller/nexus_controller.dart';
 import '../theme.dart';
 import 'brain_cards.dart';
+import 'update_card.dart';
 
 /// L'onglet « Cerveau » : installer le modèle neuronal et écrire ses règles.
 class BrainView extends StatelessWidget {
@@ -15,6 +16,8 @@ class BrainView extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: <Widget>[
+        UpdateCard(controller: controller),
+        const SizedBox(height: 14),
         BrainCard(controller: controller),
         const SizedBox(height: 14),
         PersonaCard(controller: controller),

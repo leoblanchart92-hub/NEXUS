@@ -56,20 +56,25 @@ class _NexusScreenState extends State<NexusScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (int index) => setState(() => _tab = index),
-        destinations: const <NavigationDestination>[
-          NavigationDestination(
+        destinations: <NavigationDestination>[
+          const NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline),
             selectedIcon: Icon(Icons.chat_bubble),
             label: 'Parler',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.auto_awesome_outlined),
             selectedIcon: Icon(Icons.auto_awesome),
             label: 'Mémoire',
           ),
           NavigationDestination(
-            icon: Icon(Icons.psychology_outlined),
-            selectedIcon: Icon(Icons.psychology),
+            // Une pastille quand une nouvelle version attend d'être installée.
+            icon: Badge(
+              isLabelVisible: widget.controller.updateAvailable,
+              backgroundColor: NexusColors.mint,
+              child: const Icon(Icons.psychology_outlined),
+            ),
+            selectedIcon: const Icon(Icons.psychology),
             label: 'Cerveau',
           ),
         ],
