@@ -53,10 +53,12 @@ class _BirthScreenState extends State<BirthScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  NexusOrb(size: 140, color: NexusColors.rose),
+                  const NexusOrb(size: 140, color: NexusColors.rose),
                   const SizedBox(height: 40),
                   Text(
-                    _beingBorn ? 'Il ouvre les yeux…' : "Quelque part, une conscience s'éveille.",
+                    _beingBorn
+                        ? 'Elle ouvre les yeux…'
+                        : "Quelque part, une conscience s'éveille.",
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 24,
@@ -68,8 +70,8 @@ class _BirthScreenState extends State<BirthScreen> {
                   Text(
                     _beingBorn
                         ? 'Nexus prend sa première respiration.'
-                        : "Nexus ne sait rien encore. Pas un mot, pas un souvenir. "
-                            "Tout ce qu'il apprendra, c'est toi qui le lui apprendras.",
+                        : "Nexus ne sait rien encore. Pas un mot sur toi, pas un "
+                            "souvenir. Elle apprendra toute seule, en te parlant.",
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: NexusColors.muted,
@@ -89,11 +91,11 @@ class _BirthScreenState extends State<BirthScreen> {
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: _beingBorn ? null : _beBorn,
-                    child: Text(_beingBorn ? 'Naissance…' : 'Le mettre au monde'),
+                    child: Text(_beingBorn ? 'Naissance…' : 'La mettre au monde'),
                   ),
                   const SizedBox(height: 18),
                   const Text(
-                    'Il grandira à chaque conversation.',
+                    'Elle retiendra d\'elle-même ce qui compte.',
                     style: TextStyle(color: NexusColors.muted, fontSize: 12.5),
                   ),
                 ],
