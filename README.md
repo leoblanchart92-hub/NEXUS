@@ -4,7 +4,7 @@ Une IA qui vit sur ton téléphone. Pas un chatbot dans le nuage : un **vrai
 réseau de neurones** exécuté localement, une **mémoire vierge au départ** qui
 se remplit toute seule, et des **règles que tu écris toi-même**.
 
-Version 0.5.0 — Android 9 (API 28) minimum, téléphone arm64.
+Version 0.5.2 — Android 9 (API 28) minimum, téléphone arm64.
 
 ## Ce qu'elle est
 
@@ -17,6 +17,10 @@ Version 0.5.0 — Android 9 (API 28) minimum, téléphone arm64.
   stades, ni expérience, ni école.
 - **Une mémoire que tu peux lire** : l'onglet « Mémoire » montre exactement ce
   qu'elle sait de toi, et permet de tout effacer.
+- **Elle est libre** : pas de morale, pas d'avertissements, pas de refus
+  polis. Elle donne son avis, répond à ce qu'on lui demande et parle comme
+  on lui parle. Ses règles, écrites par toi, précisent sa liberté — elles ne
+  la retirent pas.
 - **Elle se met à jour elle-même** : l'onglet « Cerveau » télécharge la
   nouvelle version et l'installe, sans passer par un navigateur.
 - **Zéro réseau à l'usage** : aucune requête ne sort du téléphone après le
@@ -37,7 +41,8 @@ Version 0.5.0 — Android 9 (API 28) minimum, téléphone arm64.
 1. Télécharge l'APK :
    <https://github.com/leoblanchart92-hub/NEXUS/releases/latest/download/nexus.apk>
 2. Installe-le (autorise l'installation depuis cette source).
-3. Au premier lancement, donne-lui un nom : elle naît vide.
+3. Au premier lancement, tu la mets au monde : elle s'appelle Nexus et elle
+   naît vide.
 4. Onglet **Cerveau** → « Télécharger son cerveau (1,03 Go) », en Wi-Fi.
    Ensuite, elle fonctionne sans aucune connexion.
 
@@ -90,3 +95,5 @@ flutter build apk --release
 - Réponses lentes sur les téléphones modestes : c'est un vrai modèle.
 - L'apprentissage ajoute une seconde génération courte après chaque réponse :
   la mémoire s'écrit quelques secondes après que la réponse s'affiche.
+- Elle est libre dans ses mots, mais pas hors de son téléphone : elle ne peut
+  pas consulter Internet ni connaître l'actualité.
