@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../ai_catalogue.dart';
+import '../app_update.dart';
 import '../local_ai_service.dart';
 import '../theme.dart';
 
@@ -17,15 +18,23 @@ class AiHomeView extends StatefulWidget {
 
 class _AiHomeViewState extends State<AiHomeView> {
   final LocalAiService _service = LocalAiService();
+  final UpdateService _updates = UpdateService();
+  late final Listenable _sources = Listenable.merge(<Listenable>[
+    _service,
+    _updates,
+  ]);
 
   @override
   void initState() {
     super.initState();
     unawaited(_service.start());
+    // Silencieux : si une version plus récente existe, une bannière apparaît.
+    unawaited(_updates.check());
   }
 
   @override
   void dispose() {
+    _updates.dispose();
     _service.dispose();
     super.dispose();
   }
@@ -35,7 +44,7 @@ class _AiHomeViewState extends State<AiHomeView> {
     return Scaffold(
       body: SafeArea(
         child: AnimatedBuilder(
-          animation: _service,
+          animation: _sources,
           builder: (BuildContext context, Widget? child) {
             final String? activeId = _service.activeId;
             final LocalAi? running = activeId == null ? null : aiById(activeId);
@@ -47,6 +56,8 @@ class _AiHomeViewState extends State<AiHomeView> {
                   onPowerOffAll:
                       _service.busy ? null : () => _service.powerOffAll(),
                 ),
+                const SizedBox(height: 18),
+                _UpdateCard(service: _updates),
                 const SizedBox(height: 22),
                 for (final LocalAi ai in aiCatalogue) ...<Widget>[
                   _AiCard(
@@ -67,6 +78,8 @@ class _AiHomeViewState extends State<AiHomeView> {
                     height: 1.45,
                   ),
                 ),
+                const SizedBox(height: 18),
+                _VersionRow(service: _updates),
               ],
             );
           },
@@ -438,6 +451,222 @@ class _Badge extends StatelessWidget {
           fontWeight: FontWeight.w600,
         ),
       ),
+    );
+  }
+}
+
+/// La bannière de mise à jour : elle n'apparaît que s'il y a quelque chose à
+/// dire (version plus récente, téléchargement, installation).
+class _UpdateCard extends StatelessWidget {
+  const _UpdateCard({required this.service});
+
+  final UpdateService service;
+
+  @override
+  Widget build(BuildContext context) {
+    final UpdatePhase phase = service.phase;
+    if (phase == UpdatePhase.idle ||
+        phase == UpdatePhase.checking ||
+        phase == UpdatePhase.upToDate) {
+      return const SizedBox.shrink();
+    }
+
+    final AppUpdate? remote = service.update;
+    final String title = switch (phase) {
+      UpdatePhase.available => 'Nexus ${remote?.version ?? ''} est disponible',
+      UpdatePhase.downloading => 'Téléchargement de la mise à jour',
+      UpdatePhase.verifying => 'Vérification du fichier…',
+      UpdatePhase.needsPermission =>
+        'Autorise Nexus à installer des mises à jour',
+      UpdatePhase.installing => 'Android installe la mise à jour',
+      _ => 'Mise à jour impossible',
+    };
+
+    final Color accent = phase == UpdatePhase.failed
+        ? NexusColors.rose
+        : NexusColors.violet;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.system_update_alt_rounded, size: 20, color: accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: NexusColors.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (phase == UpdatePhase.downloading) ...<Widget>[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: (service.progress ?? 0) / 100,
+                minHeight: 6,
+                backgroundColor: NexusColors.surfaceHigh,
+                color: NexusColors.violet,
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            _body(remote),
+            style: const TextStyle(
+              color: NexusColors.muted,
+              fontSize: 12.5,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 14),
+          _action(context, phase, remote),
+        ],
+      ),
+    );
+  }
+
+  String _body(AppUpdate? remote) {
+    switch (service.phase) {
+      case UpdatePhase.available:
+        return 'Tu utilises Nexus $nexusVersion. La nouvelle version '
+            "s'installe par-dessus, sans toucher aux IA déjà téléchargées.";
+      case UpdatePhase.downloading:
+        return '${(service.progress ?? 0).round()} % · l\'APK est enregistré '
+            "puis vérifié avant d'être installé. Le Wi-Fi est conseillé.";
+      case UpdatePhase.verifying:
+        return "On compare l'empreinte SHA-256 du fichier à celle publiée sur "
+            'GitHub.';
+      case UpdatePhase.needsPermission:
+        return 'Android demande cette autorisation une seule fois. Ensuite, '
+            'reviens ici et appuie sur « Installer ».';
+      case UpdatePhase.installing:
+        return "Termine l'installation dans la fenêtre d'Android, puis rouvre "
+            'Nexus.';
+      default:
+        return service.error ?? "La mise à jour n'a pas abouti.";
+    }
+  }
+
+  Widget _action(BuildContext context, UpdatePhase phase, AppUpdate? remote) {
+    if (phase == UpdatePhase.downloading || phase == UpdatePhase.verifying) {
+      return const SizedBox.shrink();
+    }
+    if (phase == UpdatePhase.installing) {
+      return const SizedBox.shrink();
+    }
+    if (phase == UpdatePhase.needsPermission) {
+      return OutlinedButton.icon(
+        onPressed: () => service.openInstallSettings(),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: NexusColors.text,
+          side: const BorderSide(color: NexusColors.surfaceHigh),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+        ),
+        icon: const Icon(Icons.settings_rounded, size: 18),
+        label: const Text('Ouvrir les réglages'),
+      );
+    }
+    if (phase == UpdatePhase.failed) {
+      return OutlinedButton.icon(
+        onPressed: service.busy
+            ? null
+            : () => remote == null ? service.check() : service.install(),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: NexusColors.text,
+          side: const BorderSide(color: NexusColors.surfaceHigh),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+        ),
+        icon: const Icon(Icons.refresh_rounded, size: 18),
+        label: Text(remote == null ? 'Réessayer' : 'Réessayer la mise à jour'),
+      );
+    }
+    return FilledButton.icon(
+      onPressed: service.busy ? null : () => service.install(),
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+      ),
+      icon: const Icon(Icons.download_rounded, size: 20),
+      label: const Text('Télécharger et installer'),
+    );
+  }
+}
+
+/// La version installée, avec un bouton pour revérifier à la main.
+class _VersionRow extends StatelessWidget {
+  const _VersionRow({required this.service});
+
+  final UpdateService service;
+
+  @override
+  Widget build(BuildContext context) {
+    final (String label, Color color) = switch (service.phase) {
+      UpdatePhase.checking => ('Vérification…', NexusColors.muted),
+      UpdatePhase.upToDate => ('à jour', NexusColors.mint),
+      UpdatePhase.available => ('mise à jour prête', NexusColors.violet),
+      UpdatePhase.downloading || UpdatePhase.verifying =>
+        ('en cours…', NexusColors.violet),
+      UpdatePhase.installing => ('installation…', NexusColors.violet),
+      UpdatePhase.failed => ('vérification impossible', NexusColors.rose),
+      UpdatePhase.idle => ('', NexusColors.muted),
+      UpdatePhase.needsPermission =>
+        ('autorisation requise', NexusColors.amber),
+    };
+
+    return Row(
+      children: <Widget>[
+        Text(
+          'Nexus $nexusVersion',
+          style: const TextStyle(color: NexusColors.muted, fontSize: 12),
+        ),
+        if (label.isNotEmpty) ...<Widget>[
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '· $label',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: color, fontSize: 12),
+            ),
+          ),
+        ] else
+          const Spacer(),
+        TextButton(
+          onPressed: service.busy ? null : () => service.check(),
+          style: TextButton.styleFrom(
+            foregroundColor: NexusColors.violet,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            minimumSize: const Size(0, 36),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text(
+            'Vérifier les mises à jour',
+            style: TextStyle(fontSize: 12.5),
+          ),
+        ),
+      ],
     );
   }
 }
