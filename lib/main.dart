@@ -1,5 +1,21 @@
 import 'package:flutter/material.dart';
 
-import 'ui/brain_toggle_view.dart';
+import 'theme.dart';
+import 'ui/ai_home_view.dart';
 
-void main() => runApp(const MaterialApp(home: BrainApp(), debugShowCheckedModeBanner: false));
+void main() => runApp(const NexusApp());
+
+/// Nexus : télécharger des IA, les allumer, les éteindre.
+class NexusApp extends StatelessWidget {
+  const NexusApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Nexus',
+      debugShowCheckedModeBanner: false,
+      theme: buildNexusTheme(),
+      home: const AiHomeView(),
+    );
+  }
+}
